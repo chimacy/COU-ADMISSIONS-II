@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Overridden at runtime from Settings (Supabase) so the brand color
+       an admin picks is applied everywhere, on every device, permanently -
+       these defaults are the shipped "white & green" look. */
+    --color-brand-primary: #15803d;
+    --color-brand-accent: #facc15;
+  }
+
+  body {
+    @apply bg-white text-slate-800 dark:bg-slate-950 dark:text-slate-100 font-sans antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-primary-200 dark:bg-slate-700 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary-300 dark:bg-slate-600;
+  }
+}
+
+@layer components {
+  /* PERFORMANCE NOTE: cards used to use `backdrop-blur-xl`. backdrop-filter is
+     one of the most GPU-expensive CSS effects that exists, and this class was
+     applied to dozens of stacked/scrolling elements per page - that was the
+     single biggest cause of sluggish scrolling and animation on Android.
+     Cards are now solid/opaque (cheap to paint and composite). Blur is kept
+     only on the two "chrome" surfaces that appear once per screen
+     (Sidebar, Topbar) via `.glass-chrome`, where the cost is negligible. */
+  .glass-card {
+    @apply bg-white dark:bg-slate-900 border border-primary-100/70 dark:border-slate-700/50 shadow-soft rounded-2xl;
+  }
+
+  .glass-panel {
+    @apply bg-primary-50/60 dark:bg-slate-900/60 border border-primary-100/50 dark:border-slate-700/40 rounded-xl;
+  }
+
+  .glass-chrome {
+    @apply bg-white/90 dark:bg-slate-900/80 backdrop-blur-md border border-primary-100/60 dark:border-slate-700/50 shadow-soft;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl font-semibold text-sm px-4 py-2.5 transition-transform duration-100 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 whitespace-nowrap;
+  }
+
+  .btn-primary {
+    @apply btn text-white shadow-md;
+    background: linear-gradient(135deg, var(--color-brand-primary), #16a34a);
+  }
+
+  .btn-secondary {
+    @apply btn bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-primary-200 dark:border-slate-700;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-slate-600 dark:text-slate-300;
+  }
+
+  /* Hover/press feedback only where it's cheap (no hover on touch devices) */
+  @media (hover: hover) {
+    .btn-secondary:hover { @apply bg-primary-50 dark:bg-slate-700; }
+    .btn-danger:hover { @apply bg-red-100 dark:bg-red-950; }
+    .btn-ghost:hover { @apply bg-primary-50 dark:bg-slate-800; }
+    .btn-primary:hover { @apply -translate-y-0.5; }
+  }
+
+  .input-field {
+    @apply w-full rounded-xl border border-primary-100 dark:border-slate-700 bg-white dark:bg-slate-800/60 px-4 py-2.5 text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 outline-none transition-colors focus:border-primary-400 focus:ring-4 focus:ring-primary-500/10;
+  }
+
+  .label-field {
+    @apply block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1.5;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+
+  /* Brand-color-aware elements that must reflect the admin's runtime pick */
+  .brand-surface {
+    background: linear-gradient(135deg, var(--color-brand-primary), #14532d);
+  }
+  .brand-text {
+    color: var(--color-brand-primary);
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+}

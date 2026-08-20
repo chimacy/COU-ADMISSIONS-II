@@ -1,0 +1,25 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# IMPORTANT: This app requires a Supabase backend. Run, in order:
+#   1. supabase/schema.sql
+#   2. supabase/schema-v2-additions.sql
+#   3. supabase/schema-v3-additions.sql
+#   4. supabase/schema-v4-additions.sql
+# Then set these in Netlify: Site configuration > Environment variables:
+#   VITE_SUPABASE_URL      = https://YOUR-PROJECT-REF.supabase.co
+#   VITE_SUPABASE_ANON_KEY = your anon/public key
+# Then trigger a new deploy so the build picks them up.
+
+# REQUIRED (not just a fallback): the app uses BrowserRouter for clean
+# public-facing URLs (/, /check-eligibility, /admin/login, etc). Without
+# this catch-all, refreshing or directly opening any route other than "/"
+# would 404 on Netlify.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
