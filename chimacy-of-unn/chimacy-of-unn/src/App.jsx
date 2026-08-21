@@ -1,19 +1,17 @@
 import React, { Suspense, lazy } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import ConfigNeeded from './pages/ConfigNeeded.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { NotificationProvider } from './context/NotificationContext.jsx'
+import { useAuth } from './context/AuthContext.jsx'
 import { isSupabaseConfigured } from './lib/supabaseClient.js'
 
 // After a new deploy, a browser tab that's been open (or has an old cached
-// page) may still be holding file names from the PREVIOUS build. Clicking
-// into a lazy-loaded page then tries to fetch a JS file that no longer
-// exists, fails, and previously just crashed to a blank screen. This wrapper
-// catches that specific failure and reloads the page ONE time automatically
-// to pick up the current build - after that it lets a real error through
-// instead of reloading forever.
+// page) may still be holding file names from the PREVIOUS build. This
+// wrapper catches that specific failure and reloads the page ONE time
+// automatically to pick up the current build.
 function lazyWithReload(importer) {
   return lazy(async () => {
     const key = 'chimacy_chunk_reload_attempted'
@@ -25,7 +23,6 @@ function lazyWithReload(importer) {
       if (!sessionStorage.getItem(key)) {
         sessionStorage.setItem(key, 'true')
         window.location.reload()
-        // Reloading now - return a harmless placeholder while that happens.
         return { default: () => null }
       }
       throw err
@@ -33,10 +30,6 @@ function lazyWithReload(importer) {
   })
 }
 
-// Every route is lazy-loaded: a public visitor never downloads the admin
-// dashboard's JS, and an admin never downloads the client assessment flow's
-// JS until they actually navigate there. This is the single biggest lever
-// for a fast first paint on a slow mobile connection.
 const Landing = lazyWithReload(() => import('./pages/client/Landing.jsx'))
 const Assessment = lazyWithReload(() => import('./pages/client/Assessment.jsx'))
 const TrackRequest = lazyWithReload(() => import('./pages/client/TrackRequest.jsx'))
@@ -58,21 +51,28 @@ const NotFound = lazyWithReload(() => import('./pages/NotFound.jsx'))
 
 function PageFallback() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-white dark:bg-slate-950">
+    <div className="min-h-screen flex items-center justify-center bg-white">
       <Loader2 className="h-6 w-6 text-primary-600 animate-spin" />
     </div>
   )
 }
 
 function AdminArea({ children }) {
-  // Realtime notifications + sound are only needed inside the Admin Portal -
-  // scoping the subscription here keeps the public Client Portal free of it.
   return <NotificationProvider>{children}</NotificationProvider>
 }
 
+// The Dashboard is Super-Admin-only content now, but "/admin" is also the
+// normal post-login landing spot - a regular Admin should be smoothly
+// redirected to their actual home page (New Client), not shown a blocked
+// screen right after logging in.
+function AdminHome() {
+  const { isSuperAdmin, loading } = useAuth()
+  if (loading) return <PageFallback />
+  if (!isSuperAdmin) return <Navigate to="/admin/new-client" replace />
+  return <Dashboard />
+}
+
 export default function App() {
-  // Show a friendly explanation instead of a blank white screen whenever the
-  // Supabase environment variables haven't been set yet.
   if (!isSupabaseConfigured) {
     return <ConfigNeeded />
   }
@@ -89,11 +89,11 @@ export default function App() {
 
           {/* -------- Admin Portal -------- */}
           <Route path="/admin/login" element={<Login />} />
-          <Route path="/admin" element={<ProtectedRoute><AdminArea><Dashboard /></AdminArea></ProtectedRoute>} />
-          <Route path="/admin/requests" element={<ProtectedRoute><AdminArea><Requests /></AdminArea></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute><AdminArea><AdminHome /></AdminArea></ProtectedRoute>} />
+          <Route path="/admin/requests" element={<ProtectedRoute requireSuperAdmin><AdminArea><Requests /></AdminArea></ProtectedRoute>} />
           <Route path="/admin/notifications" element={<ProtectedRoute><AdminArea><Notifications /></AdminArea></ProtectedRoute>} />
           <Route path="/admin/new-client" element={<ProtectedRoute><AdminArea><NewClient /></AdminArea></ProtectedRoute>} />
-          <Route path="/admin/clients" element={<ProtectedRoute><AdminArea><ClientRecords /></AdminArea></ProtectedRoute>} />
+          <Route path="/admin/clients" element={<ProtectedRoute requireSuperAdmin><AdminArea><ClientRecords /></AdminArea></ProtectedRoute>} />
           <Route path="/admin/quotation" element={<ProtectedRoute><AdminArea><GenerateQuotation /></AdminArea></ProtectedRoute>} />
           <Route path="/admin/payments" element={<ProtectedRoute><AdminArea><Checkout /></AdminArea></ProtectedRoute>} />
           <Route path="/admin/pricing" element={<ProtectedRoute requireSuperAdmin><AdminArea><PricingDatabase /></AdminArea></ProtectedRoute>} />
