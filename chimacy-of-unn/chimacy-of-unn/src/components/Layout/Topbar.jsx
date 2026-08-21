@@ -1,11 +1,9 @@
 import React, { memo } from 'react'
-import { Menu, Sun, Moon } from 'lucide-react'
-import { useTheme } from '../../context/ThemeContext.jsx'
+import { Menu } from 'lucide-react'
 import { useSettings } from '../../context/SettingsContext.jsx'
 import NotificationBell from './NotificationBell.jsx'
 
 function Topbar({ onMenuClick, title }) {
-  const { theme, toggleTheme } = useTheme()
   const { settings } = useSettings()
 
   return (
@@ -27,14 +25,6 @@ function Topbar({ onMenuClick, title }) {
 
         <div className="flex items-center gap-1.5 shrink-0">
           <NotificationBell />
-          <button
-            onClick={toggleTheme}
-            className="btn-ghost !p-2.5 rounded-full"
-            aria-label="Toggle theme"
-            title="Toggle dark / light mode"
-          >
-            {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-          </button>
           <div className="hidden sm:flex h-9 w-9 rounded-full items-center justify-center text-white text-xs font-bold shadow-sm brand-surface overflow-hidden">
             {settings.logo_url ? (
               <img src={settings.logo_url} alt={settings.company_name} className="h-full w-full object-cover" loading="eager" decoding="async" />
