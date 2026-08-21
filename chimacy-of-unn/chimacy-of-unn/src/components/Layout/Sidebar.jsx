@@ -2,12 +2,13 @@ import React, { memo } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, UserPlus, Users, FileText, Database, Settings, GraduationCap,
-  X, ScrollText, CreditCard, LogOut, Inbox, ShieldCheck, Calculator, Bell,
+  X, ScrollText, CreditCard, LogOut, Inbox, ShieldCheck, Calculator, Bell, Sparkles,
 } from 'lucide-react'
 import { useSettings } from '../../context/SettingsContext.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 
-const baseLinks = [
+// Full navigation - Super Admin sees everything.
+const superAdminBaseLinks = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/admin/requests', label: 'Assistance Requests', icon: Inbox },
   { to: '/admin/notifications', label: 'Notifications', icon: Bell },
@@ -17,7 +18,7 @@ const baseLinks = [
   { to: '/admin/payments', label: 'Checkout & Invoices', icon: CreditCard },
 ]
 
-const superAdminLinks = [
+const superAdminOnlyLinks = [
   { to: '/admin/pricing', label: 'Pricing Database', icon: Database },
   { to: '/admin/rules', label: 'Rules', icon: ScrollText },
   { to: '/admin/aggregate-settings', label: 'Aggregate Settings', icon: Calculator },
@@ -25,12 +26,24 @@ const superAdminLinks = [
   { to: '/admin/settings', label: 'Settings', icon: Settings },
 ]
 
+// Restricted navigation - regular Admins only register clients, check
+// eligibility, and confirm payment. No Dashboard, no Assistance Requests,
+// no Client Records.
+const adminRestrictedLinks = [
+  { to: '/admin/new-client', label: 'New Client', icon: UserPlus },
+  { to: '/admin/quotation', label: 'Eligibility Checker', icon: Sparkles },
+  { to: '/admin/payments', label: 'Checkout & Invoices', icon: CreditCard },
+  { to: '/admin/notifications', label: 'Notifications', icon: Bell },
+]
+
 function Sidebar({ open, onClose }) {
   const { settings } = useSettings()
-  const { user, profile, isSuperAdmin, logout } = useAuth()
+  const {
+    user, profile, isSuperAdmin, logout,
+  } = useAuth()
   const navigate = useNavigate()
 
-  const links = isSuperAdmin ? [...baseLinks, ...superAdminLinks] : baseLinks
+  const links = isSuperAdmin ? [...superAdminBaseLinks, ...superAdminOnlyLinks] : adminRestrictedLinks
 
   async function handleLogout() {
     await logout()
@@ -57,7 +70,7 @@ function Sidebar({ open, onClose }) {
         }`}
       >
         <div className="h-full m-0 lg:m-3 lg:rounded-2xl glass-chrome !p-0 flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-5 border-b border-primary-100/60 dark:border-slate-700/50">
+          <div className="flex items-center justify-between px-5 py-5 border-b border-primary-100/60">
             <div className="flex items-center gap-3 min-w-0">
               <div className="h-10 w-10 rounded-xl flex items-center justify-center shadow-md shrink-0 brand-surface overflow-hidden">
                 {settings.logo_url ? (
@@ -67,8 +80,8 @@ function Sidebar({ open, onClose }) {
                 )}
               </div>
               <div className="min-w-0">
-                <p className="font-display font-bold text-sm leading-tight text-slate-800 dark:text-white truncate">{settings.company_name}</p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight truncate">{settings.institution_name}</p>
+                <p className="font-display font-bold text-sm leading-tight text-slate-800 truncate">{settings.company_name}</p>
+                <p className="text-[11px] text-slate-500 leading-tight truncate">{settings.institution_name}</p>
               </div>
             </div>
             <button onClick={onClose} className="lg:hidden btn-ghost !p-1.5 rounded-full shrink-0">
@@ -77,7 +90,9 @@ function Sidebar({ open, onClose }) {
           </div>
 
           <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-            {links.map(({ to, label, icon: Icon, end }) => (
+            {links.map(({
+              to, label, icon: Icon, end,
+            }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -87,9 +102,8 @@ function Sidebar({ open, onClose }) {
                   `flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors duration-100 ${
                     isActive
                       ? 'text-white brand-surface'
-                      : 'text-slate-600 dark:text-slate-300 active:bg-primary-50 dark:active:bg-slate-800/60'
-                  }`
-                }
+                      : 'text-slate-600 active:bg-primary-50'
+                  }`}
               >
                 <Icon className="shrink-0" size={18} />
                 {label}
@@ -97,21 +111,21 @@ function Sidebar({ open, onClose }) {
             ))}
           </nav>
 
-          <div className="px-4 py-4 border-t border-primary-100/60 dark:border-slate-700/50 space-y-3">
+          <div className="px-4 py-4 border-t border-primary-100/60 space-y-3">
             {user?.email && (
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 px-1">
+              <div className="text-[11px] text-slate-500 px-1">
                 <p className="truncate">Signed in as <strong>{profile?.display_name || user.email}</strong></p>
                 {profile?.role && (
-                  <span className="badge mt-1 bg-primary-50 dark:bg-slate-800 text-primary-700 dark:text-primary-400 !text-[10px]">
+                  <span className="badge mt-1 bg-primary-50 text-primary-700 !text-[10px]">
                     {profile.role === 'super_admin' ? 'Super Admin' : 'Admin'}
                   </span>
                 )}
               </div>
             )}
-            <button onClick={handleLogout} className="btn-ghost w-full !justify-start text-red-600 dark:text-red-400">
+            <button onClick={handleLogout} className="btn-ghost w-full !justify-start text-red-600">
               <LogOut className="h-4 w-4" /> Sign Out
             </button>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center">
+            <p className="text-[11px] text-slate-400 text-center">
               &copy; {new Date().getFullYear()} {settings.company_name}
             </p>
           </div>
@@ -121,7 +135,4 @@ function Sidebar({ open, onClose }) {
   )
 }
 
-// Sidebar's own props (open/onClose) rarely change relative to how often its
-// parent layout re-renders; memoizing avoids re-rendering the whole nav list
-// (with icons) on every unrelated state change elsewhere in the app.
 export default memo(Sidebar)
