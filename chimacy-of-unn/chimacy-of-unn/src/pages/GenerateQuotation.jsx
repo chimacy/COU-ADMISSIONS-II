@@ -13,6 +13,7 @@ import { calculateAggregate } from '../utils/aggregate.js'
 import { getAssessmentConfig } from '../utils/publicApi.js'
 import { formatCurrency, formatDate } from '../utils/format.js'
 import { useSettings } from '../context/SettingsContext.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 
 async function downloadQuotationPDF(record, settings) {
   const mod = await import('../utils/pdfGenerator.js')
@@ -24,6 +25,7 @@ const emptySubjects = Array.from({ length: 4 }, () => ({ subject: '', grade: '' 
 export default function GenerateQuotation() {
   const navigate = useNavigate()
   const { settings } = useSettings()
+  const { isSuperAdmin } = useAuth()
   const [programmes, setProgrammes] = useState([])
   const [quotations, setQuotations] = useState([])
   const [config, setConfig] = useState(null)
@@ -37,10 +39,13 @@ export default function GenerateQuotation() {
   const [olevelSittings, setOlevelSittings] = useState(1)
 
   useEffect(() => {
-    Promise.all([getProgrammes(), getQuotations(), getAssessmentConfig()])
-      .then(([p, q, cfg]) => { setProgrammes(p); setQuotations(q); setConfig(cfg) })
+    // Regular admins never see saved quotations here, so skip fetching them.
+    const tasks = [getProgrammes(), getAssessmentConfig()]
+    if (isSuperAdmin) tasks.push(getQuotations())
+    Promise.all(tasks)
+      .then(([p, cfg, q]) => { setProgrammes(p); setConfig(cfg); if (q) setQuotations(q) })
       .finally(() => setLoading(false))
-  }, [])
+  }, [isSuperAdmin])
 
   const selectedProgramme = useMemo(
     () => programmes.find((p) => p.id === programmeId) || null,
@@ -60,9 +65,6 @@ export default function GenerateQuotation() {
     })
   }, [useAggregate, config, score, subjects, olevelSittings])
 
-  // The score actually used for the eligibility check: the calculated
-  // aggregate when the calculator is on and complete, otherwise the raw
-  // JAMB score typed in directly - both feed the same evaluation engine.
   const effectiveScore = useAggregate ? (aggregateResult ? Math.round(aggregateResult.aggregate) : '') : score
 
   const evaluation = useMemo(() => evaluateCandidate(selectedProgramme, effectiveScore), [selectedProgramme, effectiveScore])
@@ -86,23 +88,25 @@ export default function GenerateQuotation() {
   const gradeOptions = Object.keys(config?.grade_conversion || {})
   const chosenSubjects = subjects.map((s) => s.subject).filter(Boolean)
 
+  const pageTitle = isSuperAdmin ? 'Generate Quotation' : 'Eligibility Checker'
+
   return (
-    <DashboardLayout title="Generate Quotation">
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+    <DashboardLayout title={pageTitle}>
+      <div className={isSuperAdmin ? 'grid grid-cols-1 xl:grid-cols-2 gap-6' : 'max-w-2xl'}>
         <Card>
           <div className="flex items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary-500" />
-              <h3 className="font-bold font-display text-slate-800 dark:text-white">Quick Eligibility Checker</h3>
+              <h3 className="font-bold font-display text-slate-800">Quick Eligibility Checker</h3>
             </div>
             <button
               onClick={() => setUseAggregate((v) => !v)}
-              className={`btn-secondary !text-xs !py-1.5 ${useAggregate ? '!bg-primary-50 dark:!bg-primary-950/40 !text-primary-700 dark:!text-primary-400' : ''}`}
+              className={`btn-secondary !text-xs !py-1.5 ${useAggregate ? '!bg-primary-50 !text-primary-700' : ''}`}
             >
               <Calculator className="h-3.5 w-3.5" /> {useAggregate ? 'Using Aggregate' : 'Use Aggregate Calculator'}
             </button>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+          <p className="text-xs text-slate-500 mb-4">
             {useAggregate
               ? "Enter the client's JAMB score and O'Level grades - their aggregate is calculated automatically and used for eligibility, exactly like the Client Portal."
               : 'Check a programme against a raw JAMB score instantly. Toggle "Use Aggregate Calculator" to factor in O\'Level grades.'}
@@ -144,9 +148,9 @@ export default function GenerateQuotation() {
                   ))}
                 </div>
                 {aggregateResult && (
-                  <div className="mt-3 pt-3 border-t border-primary-100 dark:border-slate-700 flex items-center justify-between">
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Calculated Aggregate</span>
-                    <span className="font-bold text-primary-700 dark:text-primary-400">{aggregateResult.aggregate} / 400</span>
+                  <div className="mt-3 pt-3 border-t border-primary-100 flex items-center justify-between">
+                    <span className="text-xs text-slate-500">Calculated Aggregate</span>
+                    <span className="font-bold text-primary-700">{aggregateResult.aggregate} / 400</span>
                   </div>
                 )}
               </div>
@@ -156,20 +160,20 @@ export default function GenerateQuotation() {
           {selectedProgramme && (
             <div className="mt-5 glass-panel p-4 space-y-3 animate-fade-in">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Status</span>
+                <span className="text-xs font-semibold uppercase text-slate-500">Status</span>
                 <span className={`badge ${statusBadgeStyle(evaluation.status)}`}>{evaluation.status}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Working Type</span>
-                <span className="font-medium text-slate-800 dark:text-white">{evaluation.workingType || 'N/A'}</span>
+                <span className="text-xs font-semibold uppercase text-slate-500">Working Type</span>
+                <span className="font-medium text-slate-800">{evaluation.workingType || 'N/A'}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Price</span>
-                <span className="font-bold text-primary-700 dark:text-primary-400">{formatCurrency(evaluation.price, settings.currency_symbol)}</span>
+                <span className="text-xs font-semibold uppercase text-slate-500">Price</span>
+                <span className="font-bold text-primary-700">{formatCurrency(evaluation.price, settings.currency_symbol)}</span>
               </div>
               <div>
-                <span className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Recommendation</span>
-                <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">{evaluation.recommendation}</p>
+                <span className="text-xs font-semibold uppercase text-slate-500">Recommendation</span>
+                <p className="text-sm text-slate-700 mt-1">{evaluation.recommendation}</p>
               </div>
               <button
                 onClick={() => navigate(`/admin/new-client?prefill=${selectedProgramme.id}`)}
@@ -181,40 +185,44 @@ export default function GenerateQuotation() {
           )}
         </Card>
 
-        <Card>
-          <h3 className="font-bold font-display text-slate-800 dark:text-white mb-4">Regenerate a Saved Quotation</h3>
-          <div className="relative mb-4">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search saved clients..."
-              className="input-field !pl-10"
-            />
-          </div>
-
-          {loading ? (
-            <div className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary-500 mx-auto" /></div>
-          ) : filteredQuotations.length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-8">No saved quotations found.</p>
-          ) : (
-            <div className="space-y-2 max-h-[420px] overflow-y-auto">
-              {filteredQuotations.map((r) => (
-                <div key={r.id} className="glass-panel p-3 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-800 dark:text-white truncate">{r.clientName}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                      {r.programme} &middot; {formatDate(r.date)} &middot; {formatCurrency(r.price, settings.currency_symbol)}
-                    </p>
-                  </div>
-                  <button onClick={() => downloadQuotationPDF(r, settings)} className="btn-secondary !px-3 shrink-0">
-                    <FileDown className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
+        {/* Regular admins only ever see the checker above - the saved
+            quotation search/regeneration panel is Super Admin only. */}
+        {isSuperAdmin && (
+          <Card>
+            <h3 className="font-bold font-display text-slate-800 mb-4">Regenerate a Saved Quotation</h3>
+            <div className="relative mb-4">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search saved clients..."
+                className="input-field !pl-10"
+              />
             </div>
-          )}
-        </Card>
+
+            {loading ? (
+              <div className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary-500 mx-auto" /></div>
+            ) : filteredQuotations.length === 0 ? (
+              <p className="text-sm text-slate-500 text-center py-8">No saved quotations found.</p>
+            ) : (
+              <div className="space-y-2 max-h-[420px] overflow-y-auto">
+                {filteredQuotations.map((r) => (
+                  <div key={r.id} className="glass-panel p-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{r.clientName}</p>
+                      <p className="text-xs text-slate-500 truncate">
+                        {r.programme} &middot; {formatDate(r.date)} &middot; {formatCurrency(r.price, settings.currency_symbol)}
+                      </p>
+                    </div>
+                    <button onClick={() => downloadQuotationPDF(r, settings)} className="btn-secondary !px-3 shrink-0">
+                      <FileDown className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        )}
       </div>
     </DashboardLayout>
   )
