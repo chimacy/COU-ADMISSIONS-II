@@ -1,29 +1,20 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect } from 'react'
 
 const ThemeContext = createContext(null)
-const STORAGE_KEY = 'abms_theme'
 
+/**
+ * The app is white-theme-only by design now - no toggle, no reading the
+ * device's dark-mode preference. This still provides the context/hook so
+ * nothing else in the app needs to change, it just always resolves to
+ * 'light' and never applies the `dark` class to <html>.
+ */
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) return saved
-    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-  })
-
   useEffect(() => {
-    const root = document.documentElement
-    if (theme === 'dark') {
-      root.classList.add('dark')
-    } else {
-      root.classList.remove('dark')
-    }
-    localStorage.setItem(STORAGE_KEY, theme)
-  }, [theme])
-
-  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
+    document.documentElement.classList.remove('dark')
+  }, [])
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme: 'light' }}>
       {children}
     </ThemeContext.Provider>
   )
