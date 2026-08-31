@@ -15,7 +15,7 @@ const superAdminLinks = [
   { to: '/admin/notifications', label: 'Notifications', icon: Bell },
   { to: '/admin/new-client', label: 'New Client', icon: UserPlus },
   { to: '/admin/clients', label: 'Client Records', icon: Users },
-  { to: '/admin/quotation', label: 'Eligibility Checker', icon: sparkles },
+  { to: '/admin/quotation', label: 'Generate Quotation', icon: FileText },
   { to: '/admin/payments', label: 'Checkout & Invoices', icon: CreditCard },
   { to: '/admin/pricing', label: 'Pricing Database', icon: Database },
   { to: '/admin/rules', label: 'Rules', icon: ScrollText },
@@ -27,7 +27,6 @@ const superAdminLinks = [
 // Partner navigation - only their own operational tools, nothing
 // business-wide. No Dashboard, no Assistance Requests, no Client Records.
 const partnerLinks = [
-  { to: '/partner', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/partner/new-client', label: 'Register New Client', icon: UserPlus },
   { to: '/partner/eligibility-checker', label: 'Eligibility Checker', icon: Sparkles },
   { to: '/partner/my-clients', label: 'My Clients', icon: Users },
