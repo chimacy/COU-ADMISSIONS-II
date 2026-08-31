@@ -3,12 +3,13 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, UserPlus, Users, FileText, Database, Settings, GraduationCap,
   X, ScrollText, CreditCard, LogOut, Inbox, ShieldCheck, Calculator, Bell, Sparkles,
+  Wallet, UserCircle,
 } from 'lucide-react'
 import { useSettings } from '../../context/SettingsContext.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 
-// Full navigation - Super Admin sees everything.
-const superAdminBaseLinks = [
+// Super Admin sees everything.
+const superAdminLinks = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/admin/requests', label: 'Assistance Requests', icon: Inbox },
   { to: '/admin/notifications', label: 'Notifications', icon: Bell },
@@ -16,24 +17,25 @@ const superAdminBaseLinks = [
   { to: '/admin/clients', label: 'Client Records', icon: Users },
   { to: '/admin/quotation', label: 'Generate Quotation', icon: FileText },
   { to: '/admin/payments', label: 'Checkout & Invoices', icon: CreditCard },
-]
-
-const superAdminOnlyLinks = [
   { to: '/admin/pricing', label: 'Pricing Database', icon: Database },
   { to: '/admin/rules', label: 'Rules', icon: ScrollText },
   { to: '/admin/aggregate-settings', label: 'Aggregate Settings', icon: Calculator },
-  { to: '/admin/administrators', label: 'Administrators', icon: ShieldCheck },
+  { to: '/admin/administrators', label: 'Partners & Admins', icon: ShieldCheck },
   { to: '/admin/settings', label: 'Settings', icon: Settings },
 ]
 
-// Restricted navigation - regular Admins only register clients, check
-// eligibility, and confirm payment. No Dashboard, no Assistance Requests,
-// no Client Records.
-const adminRestrictedLinks = [
-  { to: '/admin/new-client', label: 'New Client', icon: UserPlus },
-  { to: '/admin/quotation', label: 'Eligibility Checker', icon: Sparkles },
-  { to: '/admin/payments', label: 'Checkout & Invoices', icon: CreditCard },
-  { to: '/admin/notifications', label: 'Notifications', icon: Bell },
+// Partner navigation - only their own operational tools, nothing
+// business-wide. No Dashboard, no Assistance Requests, no Client Records.
+const partnerLinks = [
+  { to: '/partner/new-client', label: 'Register New Client', icon: UserPlus },
+  { to: '/partner/eligibility-checker', label: 'Eligibility Checker', icon: Sparkles },
+  { to: '/partner/my-clients', label: 'My Clients', icon: Users },
+  { to: '/partner/my-requests', label: 'My Requests', icon: Inbox },
+  { to: '/partner/pay-for-client', label: 'Payment for Client', icon: CreditCard },
+  { to: '/partner/commissions', label: 'My Commissions', icon: Wallet },
+  { to: '/partner/notifications', label: 'Notifications', icon: Bell },
+  { to: '/partner/bank-details', label: 'Payment/Bank Details', icon: Database },
+  { to: '/partner/profile', label: 'Profile', icon: UserCircle },
 ]
 
 function Sidebar({ open, onClose }) {
@@ -43,7 +45,7 @@ function Sidebar({ open, onClose }) {
   } = useAuth()
   const navigate = useNavigate()
 
-  const links = isSuperAdmin ? [...superAdminBaseLinks, ...superAdminOnlyLinks] : adminRestrictedLinks
+  const links = isSuperAdmin ? superAdminLinks : partnerLinks
 
   async function handleLogout() {
     await logout()
@@ -52,10 +54,6 @@ function Sidebar({ open, onClose }) {
 
   return (
     <>
-      {/* Plain semi-transparent overlay - deliberately NO backdrop-blur here.
-          Blurring a full-screen layer is one of the most expensive things a
-          mobile GPU can be asked to do on every open/close; a flat color is
-          visually close enough and costs almost nothing. */}
       {open && (
         <div
           className="fixed inset-0 z-40 bg-slate-900/50 lg:hidden"
@@ -117,7 +115,7 @@ function Sidebar({ open, onClose }) {
                 <p className="truncate">Signed in as <strong>{profile?.display_name || user.email}</strong></p>
                 {profile?.role && (
                   <span className="badge mt-1 bg-primary-50 text-primary-700 !text-[10px]">
-                    {profile.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+                    {profile.role === 'super_admin' ? 'Super Admin' : 'Partner'}
                   </span>
                 )}
               </div>
