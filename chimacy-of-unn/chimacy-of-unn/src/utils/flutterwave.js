@@ -18,25 +18,18 @@ function loadFlutterwaveSdk() {
 
 /**
  * Opens Flutterwave's hosted checkout modal. Only the PUBLIC key is ever
- * used here - no secret key exists anywhere in this file or anywhere else
- * in the frontend bundle. On success, the result is NOT trusted directly;
- * it's immediately handed to a Supabase Edge Function
- * (supabase/functions/verify-payment) which re-checks the transaction with
- * Flutterwave server-side using the secret key before anything is marked
- * paid in the database.
+ * used here - the actual verification happens server-side in a Supabase
+ * Edge Function using the secret key, which never touches the browser.
  *
- * @param {object} params
- * @param {string} params.publicKey - settings.flutterwave_public_key
- * @param {number} params.amount
- * @param {string} params.email
- * @param {string} params.phone
- * @param {string} params.name
- * @param {string} params.requestId - the `requests.id` this payment is for
- * @param {function} params.onVerified - called with the verified payment record
- * @param {function} params.onError
+ * Supports two ownership modes:
+ *   - requestId: a Client Portal self-service payment (existing flow)
+ *   - quotationId + partnerId: a Partner paying on behalf of a client they
+ *     registered (new flow) - this NEVER marks the quotation as paid by
+ *     itself; it only records a verified payment for a Super Admin to
+ *     review and confirm.
  */
 export async function payWithFlutterwave({
-  publicKey, amount, email, phone, name, requestId, onVerified, onError,
+  publicKey, amount, email, phone, name, requestId, quotationId, partnerId, onVerified, onError,
 }) {
   if (!publicKey) {
     onError?.(new Error('Online payment is not configured yet. Please contact us to arrange payment.'))
@@ -50,7 +43,8 @@ export async function payWithFlutterwave({
     return
   }
 
-  const txRef = `chimacy-${requestId}-${Date.now()}`
+  const ownerId = requestId || quotationId || 'unknown'
+  const txRef = `chimacy-${ownerId}-${Date.now()}`
 
   window.FlutterwaveCheckout({
     public_key: publicKey,
@@ -67,7 +61,9 @@ export async function payWithFlutterwave({
             transaction_id: response.transaction_id,
             tx_ref: response.tx_ref,
             expected_amount: amount,
-            request_id: requestId,
+            request_id: requestId || null,
+            quotation_id: quotationId || null,
+            partner_id: partnerId || null,
           },
         })
         if (error) throw error
