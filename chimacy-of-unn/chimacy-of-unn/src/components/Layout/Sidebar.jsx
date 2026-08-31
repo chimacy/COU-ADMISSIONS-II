@@ -27,7 +27,7 @@ const superAdminLinks = [
 // Partner navigation - only their own operational tools, nothing
 // business-wide. No Dashboard, no Assistance Requests, no Client Records.
 const partnerLinks = [
-  { to: '/partner', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/partner', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/partner/new-client', label: 'Register New Client', icon: UserPlus },
   { to: '/partner/eligibility-checker', label: 'Eligibility Checker', icon: Sparkles },
   { to: '/partner/my-clients', label: 'My Clients', icon: Users },
