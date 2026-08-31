@@ -10,6 +10,8 @@ import {
 import { evaluateCandidate, suggestAlternatives, statusBadgeStyle, WORKING_TYPE } from '../utils/evaluation.js'
 import { formatCurrency } from '../utils/format.js'
 import { useSettings } from '../context/SettingsContext.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
+
 async function downloadQuotationPDF(record, settings) {
   const mod = await import('../utils/pdfGenerator.js')
   return mod.downloadQuotationPDF(record, settings)
@@ -24,7 +26,7 @@ const emptyForm = {
   jambScore: '',
   programmeId: '',
   category: 'New Application',
-  workingTypeOverride: '', // '' = auto-determined by engine
+  workingTypeOverride: '',
   remarks: '',
   date: new Date().toISOString().slice(0, 10),
 }
@@ -35,6 +37,11 @@ export default function NewClient() {
   const editId = params.get('edit')
   const prefillProgrammeId = params.get('prefill')
   const { settings } = useSettings()
+  const { isSuperAdmin } = useAuth()
+
+  // Where "Save" sends you afterward depends on your role - a Partner
+  // never has access to /admin/clients, so they land on their own list.
+  const myClientsPath = isSuperAdmin ? '/admin/clients' : '/partner/my-clients'
 
   const [programmes, setProgrammes] = useState([])
   const [form, setForm] = useState(emptyForm)
@@ -128,6 +135,7 @@ export default function NewClient() {
       programmeId: selectedProgramme?.id || null,
       workingType: finalWorkingType,
       price: finalPrice,
+      sourceCost: selectedProgramme?.sourceCost || 0,
       status: evaluation.status,
       benchmarkStatus: evaluation.benchmarkStatus,
       recommendation: evaluation.recommendation,
@@ -145,7 +153,7 @@ export default function NewClient() {
       if (andDownload) {
         downloadQuotationPDF(persisted, settings)
       }
-      setTimeout(() => navigate('/admin/clients'), andDownload ? 600 : 0)
+      setTimeout(() => navigate(myClientsPath), andDownload ? 600 : 0)
     } catch (err) {
       alert(err.message || 'Failed to save client record.')
     } finally {
@@ -168,12 +176,12 @@ export default function NewClient() {
   }
 
   return (
-    <DashboardLayout title={editId ? 'Edit Client' : 'New Client'}>
+    <DashboardLayout title={editId ? 'Edit Client' : 'Register New Client'}>
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <Card className="xl:col-span-2 space-y-6">
           <div>
-            <h3 className="font-bold font-display text-slate-800 dark:text-white mb-1">Client Information</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <h3 className="font-bold font-display text-slate-800 mb-1">Client Information</h3>
+            <p className="text-xs text-slate-500">
               All fields marked * are required. Institution: <strong>{settings.institution_name}</strong>
             </p>
           </div>
@@ -218,7 +226,7 @@ export default function NewClient() {
             <button onClick={handleReset} className="btn-ghost">
               <RefreshCcw className="h-4 w-4" /> Reset
             </button>
-            {saved && <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 self-center">Saved successfully ✓</span>}
+            {saved && <span className="text-xs font-semibold text-emerald-600 self-center">Saved successfully ✓</span>}
           </div>
         </Card>
 
@@ -265,19 +273,19 @@ export default function NewClient() {
 
           {alternatives.length > 0 && (
             <Card>
-              <h4 className="font-bold text-sm text-slate-800 dark:text-white mb-3">Suggested Alternatives</h4>
+              <h4 className="font-bold text-sm text-slate-800 mb-3">Suggested Alternatives</h4>
               <div className="space-y-2">
                 {alternatives.map(({ programme, evaluation: ev }) => (
                   <button
                     key={programme.id}
                     onClick={() => setForm((f) => ({ ...f, programmeId: programme.id, workingTypeOverride: '' }))}
-                    className="w-full text-left glass-panel p-3 hover:border-primary-300 dark:hover:border-primary-600 transition-colors"
+                    className="w-full text-left glass-panel p-3 hover:border-primary-300 transition-colors"
                   >
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-slate-800 dark:text-white">{programme.name}</p>
+                      <p className="text-sm font-semibold text-slate-800">{programme.name}</p>
                       <span className={`badge !text-[10px] ${statusBadgeStyle(ev.status)}`}>{ev.status}</span>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{programme.grade} &middot; {formatCurrency(ev.price, settings.currency_symbol)}</p>
+                    <p className="text-xs text-slate-500">{programme.grade} &middot; {formatCurrency(ev.price, settings.currency_symbol)}</p>
                   </button>
                 ))}
               </div>
