@@ -18,19 +18,17 @@ export function AuthProvider({ children }) {
     let { data } = await supabase.from('admin_profiles').select('*').eq('id', userId).maybeSingle()
 
     if (!data) {
-      // First time this admin has logged in - auto-provision their profile.
-      // A database trigger (see supabase/schema-v2-additions.sql) makes the
-      // very first admin_profiles row ever created a super_admin
-      // automatically (bootstrap); every profile after that defaults to the
-      // regular 'admin' role until a super admin promotes them.
+      // First time this person has logged in - auto-provision their profile.
+      // A database trigger makes the very first admin_profiles row ever
+      // created a super_admin automatically (bootstrap); every profile
+      // after that defaults to 'partner' until a super admin changes it.
       const { data: created } = await supabase
         .from('admin_profiles')
-        .insert({ id: userId, display_name: userEmail?.split('@')[0] || 'Admin' })
+        .insert({ id: userId, display_name: userEmail?.split('@')[0] || 'User' })
         .select()
         .maybeSingle()
       data = created
     } else {
-      // Best-effort last-login touch - never blocks the UI on failure.
       supabase.from('admin_profiles').update({ last_login: new Date().toISOString() }).eq('id', userId).then(() => {})
     }
     setProfile(data)
@@ -77,6 +75,7 @@ export function AuthProvider({ children }) {
     profile,
     role: profile?.role || null,
     isSuperAdmin: profile?.role === 'super_admin' && profile?.status === 'active',
+    isPartner: profile?.role === 'partner' && profile?.status === 'active',
     isActive: profile ? profile.status === 'active' : true,
     isAuthenticated: !!session,
     loading,
