@@ -38,8 +38,12 @@ export default function GenerateQuotation() {
   const [subjects, setSubjects] = useState(emptySubjects)
   const [olevelSittings, setOlevelSittings] = useState(1)
 
+  // A Partner never has access to /admin/*, so "Continue to Full Quotation"
+  // and the saved-quotation list must point at their own routes instead.
+  const newClientPath = isSuperAdmin ? '/admin/new-client' : '/partner/new-client'
+
   useEffect(() => {
-    // Regular admins never see saved quotations here, so skip fetching them.
+    // Regular Partners never see saved quotations here, so skip fetching them.
     const tasks = [getProgrammes(), getAssessmentConfig()]
     if (isSuperAdmin) tasks.push(getQuotations())
     Promise.all(tasks)
@@ -176,7 +180,7 @@ export default function GenerateQuotation() {
                 <p className="text-sm text-slate-700 mt-1">{evaluation.recommendation}</p>
               </div>
               <button
-                onClick={() => navigate(`/admin/new-client?prefill=${selectedProgramme.id}`)}
+                onClick={() => navigate(`${newClientPath}?prefill=${selectedProgramme.id}`)}
                 className="btn-primary w-full mt-2"
               >
                 <UserPlus className="h-4 w-4" /> Continue to Full Quotation
@@ -185,7 +189,7 @@ export default function GenerateQuotation() {
           )}
         </Card>
 
-        {/* Regular admins only ever see the checker above - the saved
+        {/* Regular Partners only ever see the checker above - the saved
             quotation search/regeneration panel is Super Admin only. */}
         {isSuperAdmin && (
           <Card>
