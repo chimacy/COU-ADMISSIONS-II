@@ -16,7 +16,7 @@ const superAdminLinks = [
   { to: '/admin/new-client', label: 'New Client', icon: UserPlus },
   { to: '/admin/clients', label: 'Client Records', icon: Users },
   { to: '/admin/quotation', label: 'Eligibility Checker', icon: FileText },
-  { to: '/admin/payments', label: 'Payments', icon: CreditCard },
+  { to: '/admin/payments', label: 'Payments Confirmation', icon: CreditCard },
   { to: '/admin/pricing', label: 'Pricing Database', icon: Database },
   { to: '/admin/rules', label: 'Rules', icon: ScrollText },
   { to: '/admin/aggregate-settings', label: 'Aggregate Settings', icon: Calculator },
