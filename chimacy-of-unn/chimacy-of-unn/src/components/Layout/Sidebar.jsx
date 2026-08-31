@@ -20,7 +20,7 @@ const superAdminLinks = [
   { to: '/admin/pricing', label: 'Pricing Database', icon: Database },
   { to: '/admin/rules', label: 'Rules', icon: ScrollText },
   { to: '/admin/aggregate-settings', label: 'Aggregate Settings', icon: Calculator },
-  { to: '/admin/administrators', label: 'Partners & Admins', icon: ShieldCheck },
+  { to: '/admin/administrators', label: 'Partners', icon: ShieldCheck },
   { to: '/admin/settings', label: 'Settings', icon: Settings },
 ]
 
