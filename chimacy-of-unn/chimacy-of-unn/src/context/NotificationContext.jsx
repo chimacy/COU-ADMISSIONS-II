@@ -2,40 +2,43 @@ import React, {
   createContext, useContext, useState, useEffect, useCallback, useRef,
 } from 'react'
 import { supabase } from '../lib/supabaseClient.js'
+import { useAuth } from './AuthContext.jsx'
 
 const NotificationContext = createContext(null)
 const SOUND_PREF_KEY = 'chimacy_sound_enabled'
+const PUSH_PREF_KEY = 'chimacy_push_enabled'
 
 export function NotificationProvider({ children }) {
+  const { isAuthenticated } = useAuth()
   const [notifications, setNotifications] = useState([])
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem(SOUND_PREF_KEY) === 'true')
+  const [pushEnabled, setPushEnabled] = useState(() => localStorage.getItem(PUSH_PREF_KEY) === 'true' && typeof Notification !== 'undefined' && Notification.permission === 'granted')
   const audioCtxRef = useRef(null)
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
   const fetchNotifications = useCallback(async () => {
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(30)
+    const { data } = await supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(30)
     if (data) setNotifications(data)
   }, [])
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setNotifications([])
+      return undefined
+    }
     fetchNotifications()
-
     const channel = supabase
       .channel('admin-notifications')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
         setNotifications((prev) => [payload.new, ...prev].slice(0, 30))
         playSound()
+        showPushNotification(payload.new)
       })
       .subscribe()
-
     return () => { supabase.removeChannel(channel) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchNotifications])
+  }, [isAuthenticated, fetchNotifications])
 
   function playSound() {
     if (!soundEnabled || !audioCtxRef.current) return
@@ -52,13 +55,17 @@ export function NotificationProvider({ children }) {
       gain.connect(ctx.destination)
       osc.start()
       osc.stop(ctx.currentTime + 0.35)
-    } catch (e) {
-      // ignore - sound is a nice-to-have, never blocks the notification itself
-    }
+    } catch (e) { /* sound is a nice-to-have */ }
   }
 
-  // Browsers require a user gesture before audio can play - this is called
-  // from a click handler ("Enable Sound Notifications" button).
+  function showPushNotification(notification) {
+    if (!pushEnabled || typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+    try {
+      // eslint-disable-next-line no-new
+      new Notification(notification.title || 'New notification', { body: notification.body || '', tag: notification.id })
+    } catch (e) { /* some mobile browsers restrict this outside a service worker */ }
+  }
+
   const enableSound = useCallback(() => {
     if (!audioCtxRef.current) {
       const Ctx = window.AudioContext || window.webkitAudioContext
@@ -67,6 +74,21 @@ export function NotificationProvider({ children }) {
     audioCtxRef.current.resume?.()
     localStorage.setItem(SOUND_PREF_KEY, 'true')
     setSoundEnabled(true)
+  }, [])
+
+  const enablePush = useCallback(async () => {
+    if (typeof Notification === 'undefined') {
+      alert('Your browser does not support notifications.')
+      return
+    }
+    const permission = await Notification.requestPermission()
+    if (permission === 'granted') {
+      localStorage.setItem(PUSH_PREF_KEY, 'true')
+      setPushEnabled(true)
+      new Notification('Notifications enabled', { body: 'You will now see alerts on this device.' })
+    } else {
+      alert('Notification permission was not granted. You can enable it in your browser settings.')
+    }
   }, [])
 
   const markAsRead = useCallback(async (id) => {
@@ -83,7 +105,7 @@ export function NotificationProvider({ children }) {
 
   return (
     <NotificationContext.Provider value={{
-      notifications, unreadCount, soundEnabled, enableSound, markAsRead, markAllAsRead, refetch: fetchNotifications,
+      notifications, unreadCount, soundEnabled, enableSound, pushEnabled, enablePush, markAsRead, markAllAsRead, refetch: fetchNotifications,
     }}
     >
       {children}
@@ -95,4 +117,4 @@ export function useNotifications() {
   const ctx = useContext(NotificationContext)
   if (!ctx) throw new Error('useNotifications must be used within NotificationProvider')
   return ctx
-}
+        }
