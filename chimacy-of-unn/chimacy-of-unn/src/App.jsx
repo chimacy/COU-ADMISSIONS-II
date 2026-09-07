@@ -8,10 +8,6 @@ import { NotificationProvider } from './context/NotificationContext.jsx'
 import { useAuth } from './context/AuthContext.jsx'
 import { isSupabaseConfigured } from './lib/supabaseClient.js'
 
-// After a new deploy, a browser tab that's been open (or has an old cached
-// page) may still be holding file names from the PREVIOUS build. This
-// wrapper catches that specific failure and reloads the page ONE time
-// automatically to pick up the current build.
 function lazyWithReload(importer) {
   return lazy(async () => {
     const key = 'chimacy_chunk_reload_attempted'
@@ -36,7 +32,6 @@ const TrackRequest = lazyWithReload(() => import('./pages/client/TrackRequest.js
 
 const Login = lazyWithReload(() => import('./pages/Login.jsx'))
 
-// Super Admin only
 const Dashboard = lazyWithReload(() => import('./pages/Dashboard.jsx'))
 const ClientRecords = lazyWithReload(() => import('./pages/ClientRecords.jsx'))
 const Requests = lazyWithReload(() => import('./pages/Requests.jsx'))
@@ -46,14 +41,11 @@ const Administrators = lazyWithReload(() => import('./pages/Administrators.jsx')
 const AggregateSettings = lazyWithReload(() => import('./pages/AggregateSettings.jsx'))
 const Settings = lazyWithReload(() => import('./pages/Settings.jsx'))
 
-// Shared operational pages (Super Admin mounts them under /admin/*,
-// Partner mounts the SAME components under /partner/*)
 const NewClient = lazyWithReload(() => import('./pages/NewClient.jsx'))
 const GenerateQuotation = lazyWithReload(() => import('./pages/GenerateQuotation.jsx'))
 const Checkout = lazyWithReload(() => import('./pages/Checkout.jsx'))
 const Notifications = lazyWithReload(() => import('./pages/Notifications.jsx'))
 
-// Partner only
 const PartnerHome = lazyWithReload(() => import('./pages/partner/PartnerHome.jsx'))
 const MyClients = lazyWithReload(() => import('./pages/partner/MyClients.jsx'))
 const PayForClient = lazyWithReload(() => import('./pages/partner/PayForClient.jsx'))
@@ -71,13 +63,6 @@ function PageFallback() {
   )
 }
 
-function AdminArea({ children }) {
-  return <NotificationProvider>{children}</NotificationProvider>
-}
-
-// "/admin" is the normal post-login landing spot for a Super Admin, but a
-// Partner should never see it - they get redirected straight to their own
-// home page instead of a blocked screen right after logging in.
 function AdminHome() {
   const { isSuperAdmin, loading } = useAuth()
   if (loading) return <PageFallback />
@@ -85,8 +70,6 @@ function AdminHome() {
   return <Dashboard />
 }
 
-// Mirror redirect the other way: a Super Admin who somehow lands on
-// "/partner" gets sent to their own dashboard instead.
 function PartnerHomeGuard() {
   const { isSuperAdmin, loading } = useAuth()
   if (loading) return <PageFallback />
@@ -101,47 +84,51 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <Suspense fallback={<PageFallback />}>
-        <Routes>
-          {/* -------- Public Client Portal -------- */}
-          <Route path="/" element={<Landing />} />
-          <Route path="/check-eligibility" element={<Assessment />} />
-          <Route path="/request-assistance" element={<Assessment />} />
-          <Route path="/track-request" element={<TrackRequest />} />
+      {/* PERFORMANCE FIX: NotificationProvider now wraps the whole app ONCE,
+          for its entire lifetime, instead of being re-created inside every
+          single route - that used to tear down and re-open a Realtime
+          WebSocket connection on every page navigation, which was the main
+          cause of the app feeling sluggish. It now only
+          subscribes/unsubscribes when you actually log in or out. */}
+      <NotificationProvider>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/check-eligibility" element={<Assessment />} />
+            <Route path="/request-assistance" element={<Assessment />} />
+            <Route path="/track-request" element={<TrackRequest />} />
 
-          {/* -------- Login (shared) -------- */}
-          <Route path="/admin/login" element={<Login />} />
+            <Route path="/admin/login" element={<Login />} />
 
-          {/* -------- Super Admin only -------- */}
-          <Route path="/admin" element={<ProtectedRoute><AdminArea><AdminHome /></AdminArea></ProtectedRoute>} />
-          <Route path="/admin/requests" element={<ProtectedRoute requireSuperAdmin><AdminArea><Requests /></AdminArea></ProtectedRoute>} />
-          <Route path="/admin/clients" element={<ProtectedRoute requireSuperAdmin><AdminArea><ClientRecords /></AdminArea></ProtectedRoute>} />
-          <Route path="/admin/new-client" element={<ProtectedRoute requireSuperAdmin><AdminArea><NewClient /></AdminArea></ProtectedRoute>} />
-          <Route path="/admin/quotation" element={<ProtectedRoute requireSuperAdmin><AdminArea><GenerateQuotation /></AdminArea></ProtectedRoute>} />
-          <Route path="/admin/payments" element={<ProtectedRoute requireSuperAdmin><AdminArea><Checkout /></AdminArea></ProtectedRoute>} />
-          <Route path="/admin/notifications" element={<ProtectedRoute requireSuperAdmin><AdminArea><Notifications /></AdminArea></ProtectedRoute>} />
-          <Route path="/admin/pricing" element={<ProtectedRoute requireSuperAdmin><AdminArea><PricingDatabase /></AdminArea></ProtectedRoute>} />
-          <Route path="/admin/benchmarks" element={<ProtectedRoute requireSuperAdmin><AdminArea><PricingDatabase /></AdminArea></ProtectedRoute>} />
-          <Route path="/admin/rules" element={<ProtectedRoute requireSuperAdmin><AdminArea><RulesPage /></AdminArea></ProtectedRoute>} />
-          <Route path="/admin/aggregate-settings" element={<ProtectedRoute requireSuperAdmin><AdminArea><AggregateSettings /></AdminArea></ProtectedRoute>} />
-          <Route path="/admin/administrators" element={<ProtectedRoute requireSuperAdmin><AdminArea><Administrators /></AdminArea></ProtectedRoute>} />
-          <Route path="/admin/settings" element={<ProtectedRoute requireSuperAdmin><AdminArea><Settings /></AdminArea></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><AdminHome /></ProtectedRoute>} />
+            <Route path="/admin/requests" element={<ProtectedRoute requireSuperAdmin><Requests /></ProtectedRoute>} />
+            <Route path="/admin/clients" element={<ProtectedRoute requireSuperAdmin><ClientRecords /></ProtectedRoute>} />
+            <Route path="/admin/new-client" element={<ProtectedRoute requireSuperAdmin><NewClient /></ProtectedRoute>} />
+            <Route path="/admin/quotation" element={<ProtectedRoute requireSuperAdmin><GenerateQuotation /></ProtectedRoute>} />
+            <Route path="/admin/payments" element={<ProtectedRoute requireSuperAdmin><Checkout /></ProtectedRoute>} />
+            <Route path="/admin/notifications" element={<ProtectedRoute requireSuperAdmin><Notifications /></ProtectedRoute>} />
+            <Route path="/admin/pricing" element={<ProtectedRoute requireSuperAdmin><PricingDatabase /></ProtectedRoute>} />
+            <Route path="/admin/benchmarks" element={<ProtectedRoute requireSuperAdmin><PricingDatabase /></ProtectedRoute>} />
+            <Route path="/admin/rules" element={<ProtectedRoute requireSuperAdmin><RulesPage /></ProtectedRoute>} />
+            <Route path="/admin/aggregate-settings" element={<ProtectedRoute requireSuperAdmin><AggregateSettings /></ProtectedRoute>} />
+            <Route path="/admin/administrators" element={<ProtectedRoute requireSuperAdmin><Administrators /></ProtectedRoute>} />
+            <Route path="/admin/settings" element={<ProtectedRoute requireSuperAdmin><Settings /></ProtectedRoute>} />
 
-          {/* -------- Partner -------- */}
-          <Route path="/partner" element={<ProtectedRoute><AdminArea><PartnerHomeGuard /></AdminArea></ProtectedRoute>} />
-          <Route path="/partner/new-client" element={<ProtectedRoute><AdminArea><NewClient /></AdminArea></ProtectedRoute>} />
-          <Route path="/partner/eligibility-checker" element={<ProtectedRoute><AdminArea><GenerateQuotation /></AdminArea></ProtectedRoute>} />
-          <Route path="/partner/my-clients" element={<ProtectedRoute><AdminArea><MyClients title="My Clients" /></AdminArea></ProtectedRoute>} />
-          <Route path="/partner/my-requests" element={<ProtectedRoute><AdminArea><MyClients title="My Requests" /></AdminArea></ProtectedRoute>} />
-          <Route path="/partner/pay-for-client" element={<ProtectedRoute><AdminArea><PayForClient /></AdminArea></ProtectedRoute>} />
-          <Route path="/partner/commissions" element={<ProtectedRoute><AdminArea><PartnerCommissions /></AdminArea></ProtectedRoute>} />
-          <Route path="/partner/notifications" element={<ProtectedRoute><AdminArea><Notifications /></AdminArea></ProtectedRoute>} />
-          <Route path="/partner/bank-details" element={<ProtectedRoute><AdminArea><PartnerBankDetails /></AdminArea></ProtectedRoute>} />
-          <Route path="/partner/profile" element={<ProtectedRoute><AdminArea><PartnerProfile /></AdminArea></ProtectedRoute>} />
+            <Route path="/partner" element={<ProtectedRoute><PartnerHomeGuard /></ProtectedRoute>} />
+            <Route path="/partner/new-client" element={<ProtectedRoute><NewClient /></ProtectedRoute>} />
+            <Route path="/partner/eligibility-checker" element={<ProtectedRoute><GenerateQuotation /></ProtectedRoute>} />
+            <Route path="/partner/my-clients" element={<ProtectedRoute><MyClients title="My Clients" /></ProtectedRoute>} />
+            <Route path="/partner/my-requests" element={<ProtectedRoute><MyClients title="My Requests" /></ProtectedRoute>} />
+            <Route path="/partner/pay-for-client" element={<ProtectedRoute><PayForClient /></ProtectedRoute>} />
+            <Route path="/partner/commissions" element={<ProtectedRoute><PartnerCommissions /></ProtectedRoute>} />
+            <Route path="/partner/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+            <Route path="/partner/bank-details" element={<ProtectedRoute><PartnerBankDetails /></ProtectedRoute>} />
+            <Route path="/partner/profile" element={<ProtectedRoute><PartnerProfile /></ProtectedRoute>} />
 
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Suspense>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
+      </NotificationProvider>
     </ErrorBoundary>
   )
-}
+          }
