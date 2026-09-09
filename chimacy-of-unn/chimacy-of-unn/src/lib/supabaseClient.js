@@ -1,30 +1,44 @@
+```javascript
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey)
+export const isSupabaseConfigured =
+  Boolean(supabaseUrl) && Boolean(supabaseAnonKey)
 
 if (!isSupabaseConfigured) {
-  // eslint-disable-next-line no-console
-  console.error(
-    'Missing Supabase configuration. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file (see .env.example) or in your Netlify environment variables, then redeploy.',
+  console.warn(
+    'Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.'
   )
 }
 
-// IMPORTANT: createClient() throws immediately if given an invalid/empty URL,
-// which would crash the entire app before React can render anything (a blank
-// white screen with no error message). Passing a harmless placeholder URL
-// when unconfigured lets the app boot normally and show a friendly
-// "not configured yet" screen (see App.jsx) instead of a silent crash.
 export const supabase = createClient(
-  isSupabaseConfigured ? supabaseUrl : 'https://placeholder.supabase.co',
-  isSupabaseConfigured ? supabaseAnonKey : 'placeholder-key',
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key',
   {
     auth: {
-      persistSession: true,
       autoRefreshToken: true,
+      persistSession: true,
       detectSessionInUrl: true,
     },
-  },
+
+    realtime: {
+      // Keep the realtime connection from hanging indefinitely.
+      timeout: 10000,
+
+      // Supabase automatically reconnects after temporary failures.
+      reconnectAfterMs: (tries) => {
+        const delays = [1000, 2000, 5000, 10000]
+        return delays[tries - 1] || 10000
+      },
+    },
+
+    global: {
+      headers: {
+        'x-application-name': 'cou-admission-service',
+      },
+    },
+  }
 )
+```
