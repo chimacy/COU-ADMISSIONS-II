@@ -28,10 +28,6 @@ function lazyWithReload(importer) {
   })
 }
 
-/* =========================
-   CLIENT PAGES
-========================= */
-
 const Landing = lazyWithReload(
   () => import('./pages/client/Landing.jsx')
 )
@@ -44,17 +40,9 @@ const TrackRequest = lazyWithReload(
   () => import('./pages/client/TrackRequest.jsx')
 )
 
-/* =========================
-   AUTH
-========================= */
-
 const Login = lazyWithReload(
   () => import('./pages/Login.jsx')
 )
-
-/* =========================
-   SUPER ADMIN PAGES
-========================= */
 
 const Dashboard = lazyWithReload(
   () => import('./pages/Dashboard.jsx')
@@ -88,17 +76,9 @@ const Settings = lazyWithReload(
   () => import('./pages/Settings.jsx')
 )
 
-/* =========================
-   PAYMENT ACCOUNTS
-========================= */
-
 const PaymentAccounts = lazyWithReload(
   () => import('./pages/PaymentAccounts.jsx')
 )
-
-/* =========================
-   SHARED / ADMIN ACTION PAGES
-========================= */
 
 const NewClient = lazyWithReload(
   () => import('./pages/NewClient.jsx')
@@ -115,10 +95,6 @@ const Checkout = lazyWithReload(
 const Notifications = lazyWithReload(
   () => import('./pages/Notifications.jsx')
 )
-
-/* =========================
-   PARTNER PAGES
-========================= */
 
 const PartnerHome = lazyWithReload(
   () => import('./pages/partner/PartnerHome.jsx')
@@ -144,10 +120,6 @@ const PartnerProfile = lazyWithReload(
   () => import('./pages/partner/PartnerProfile.jsx')
 )
 
-/* =========================
-   FALLBACK
-========================= */
-
 const NotFound = lazyWithReload(
   () => import('./pages/NotFound.jsx')
 )
@@ -159,10 +131,6 @@ function PageFallback() {
     </div>
   )
 }
-
-/* =========================
-   SUPER ADMIN HOME GUARD
-========================= */
 
 function AdminHome() {
   const { isSuperAdmin, loading } = useAuth()
@@ -178,10 +146,6 @@ function AdminHome() {
   return <Dashboard />
 }
 
-/* =========================
-   PARTNER HOME GUARD
-========================= */
-
 function PartnerHomeGuard() {
   const { isSuperAdmin, loading } = useAuth()
 
@@ -195,10 +159,6 @@ function PartnerHomeGuard() {
 
   return <PartnerHome />
 }
-
-/* =========================
-   APP
-========================= */
 
 export default function App() {
   if (!isSupabaseConfigured) {
@@ -215,10 +175,6 @@ export default function App() {
       <NotificationProvider>
         <Suspense fallback={<PageFallback />}>
           <Routes>
-
-            {/* =========================
-                PUBLIC / CLIENT ROUTES
-            ========================= */}
 
             <Route
               path="/"
