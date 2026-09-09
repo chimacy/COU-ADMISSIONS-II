@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, BellRing, Check, Volume2, VolumeX } from 'lucide-react'
+import {
+  Bell, BellRing, Check, Volume2, VolumeX, Smartphone, SmartphoneNfc,
+} from 'lucide-react'
 import { useNotifications } from '../../context/NotificationContext.jsx'
 
 function timeAgo(iso) {
@@ -13,7 +15,7 @@ function timeAgo(iso) {
 
 function NotificationBell() {
   const {
-    notifications, unreadCount, soundEnabled, enableSound, markAsRead, markAllAsRead,
+    notifications, unreadCount, soundEnabled, enableSound, pushEnabled, enablePush, markAsRead, markAllAsRead,
   } = useNotifications()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -45,16 +47,10 @@ function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white dark:bg-slate-900 border border-primary-100 dark:border-slate-700 shadow-xl rounded-2xl z-50 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-primary-100 dark:border-slate-700">
-            <p className="font-bold text-sm text-slate-800 dark:text-white">Notifications</p>
+        <div className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white border border-primary-100 shadow-xl rounded-2xl z-50 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-primary-100">
+            <p className="font-bold text-sm text-slate-800">Notifications</p>
             <div className="flex items-center gap-1">
-              {!soundEnabled && (
-                <button onClick={enableSound} title="Enable sound notifications" className="btn-ghost !p-1.5 rounded-full">
-                  <VolumeX className="h-4 w-4" />
-                </button>
-              )}
-              {soundEnabled && <Volume2 className="h-4 w-4 text-primary-600 mx-1.5" title="Sound enabled" />}
               {unreadCount > 0 && (
                 <button onClick={markAllAsRead} title="Mark all as read" className="btn-ghost !p-1.5 rounded-full">
                   <Check className="h-4 w-4" />
@@ -62,6 +58,24 @@ function NotificationBell() {
               )}
             </div>
           </div>
+
+          {(!soundEnabled || !pushEnabled) && (
+            <div className="px-4 py-3 border-b border-primary-100 bg-primary-50/60 space-y-2">
+              <p className="text-[11px] text-slate-500">Turn these on so you never miss an alert on this device:</p>
+              <div className="flex gap-2">
+                {!soundEnabled && (
+                  <button onClick={enableSound} className="btn-secondary !text-[11px] !py-1.5 flex-1">
+                    <Volume2 className="h-3.5 w-3.5" /> Enable Sound
+                  </button>
+                )}
+                {!pushEnabled && (
+                  <button onClick={enablePush} className="btn-primary !text-[11px] !py-1.5 flex-1">
+                    <SmartphoneNfc className="h-3.5 w-3.5" /> Enable Phone Alerts
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="max-h-80 overflow-y-auto">
             {notifications.length === 0 ? (
@@ -71,10 +85,10 @@ function NotificationBell() {
                 <button
                   key={n.id}
                   onClick={() => openNotification(n)}
-                  className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 last:border-0 ${!n.read ? 'bg-primary-50/60 dark:bg-primary-950/20' : ''}`}
+                  className={`w-full text-left px-4 py-3 border-b border-slate-100 last:border-0 ${!n.read ? 'bg-primary-50/60' : ''}`}
                 >
-                  <p className="text-sm font-semibold text-slate-800 dark:text-white">{n.title}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">{n.body}</p>
+                  <p className="text-sm font-semibold text-slate-800">{n.title}</p>
+                  <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{n.body}</p>
                   <p className="text-[10px] text-slate-400 mt-1">{timeAgo(n.created_at)}</p>
                 </button>
               ))
