@@ -15,17 +15,18 @@ const superAdminLinks = [
   { to: '/admin/notifications', label: 'Notifications', icon: Bell },
   { to: '/admin/new-client', label: 'New Client', icon: UserPlus },
   { to: '/admin/clients', label: 'Client Records', icon: Users },
-  { to: '/admin/quotation', label: 'Generate Quotation', icon: FileText },
-  { to: '/admin/payments', label: 'Checkout & Invoices', icon: CreditCard },
+  { to: '/admin/quotation', label: 'Eligiblity Checker', icon: Sparkles },
+  { to: '/admin/payments', label: 'Payment Confirmation', icon: CreditCard },
   { to: '/admin/pricing', label: 'Pricing Database', icon: Database },
   { to: '/admin/rules', label: 'Rules', icon: ScrollText },
   { to: '/admin/aggregate-settings', label: 'Aggregate Settings', icon: Calculator },
-  { to: '/admin/administrators', label: 'Partners & Admins', icon: ShieldCheck },
+  { to: '/admin/administrators', label: 'COU Partners', icon: ShieldCheck },
   { to: '/admin/payment-accounts', label: 'Payment Accounts', icon: Landmark },
   { to: '/admin/settings', label: 'Settings', icon: Settings },
 ]
 
 const partnerLinks = [
+   { to: '/partner/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/partner/new-client', label: 'Register New Client', icon: UserPlus },
   { to: '/partner/eligibility-checker', label: 'Eligibility Checker', icon: Sparkles },
   { to: '/partner/my-clients', label: 'My Clients', icon: Users },
