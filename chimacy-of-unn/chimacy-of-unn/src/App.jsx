@@ -1,3 +1,4 @@
+```jsx
 import React, { Suspense, lazy } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
@@ -11,6 +12,7 @@ import { isSupabaseConfigured } from './lib/supabaseClient.js'
 function lazyWithReload(importer) {
   return lazy(async () => {
     const key = 'chimacy_chunk_reload_attempted'
+
     try {
       const mod = await importer()
       sessionStorage.removeItem(key)
@@ -21,39 +23,131 @@ function lazyWithReload(importer) {
         window.location.reload()
         return { default: () => null }
       }
+
       throw err
     }
   })
 }
 
-const Landing = lazyWithReload(() => import('./pages/client/Landing.jsx'))
-const Assessment = lazyWithReload(() => import('./pages/client/Assessment.jsx'))
-const TrackRequest = lazyWithReload(() => import('./pages/client/TrackRequest.jsx'))
+/* =========================
+   CLIENT PAGES
+========================= */
 
-const Login = lazyWithReload(() => import('./pages/Login.jsx'))
+const Landing = lazyWithReload(
+  () => import('./pages/client/Landing.jsx')
+)
 
-const Dashboard = lazyWithReload(() => import('./pages/Dashboard.jsx'))
-const ClientRecords = lazyWithReload(() => import('./pages/ClientRecords.jsx'))
-const Requests = lazyWithReload(() => import('./pages/Requests.jsx'))
-const PricingDatabase = lazyWithReload(() => import('./pages/PricingDatabase.jsx'))
-const RulesPage = lazyWithReload(() => import('./pages/RulesPage.jsx'))
-const Administrators = lazyWithReload(() => import('./pages/Administrators.jsx'))
-const AggregateSettings = lazyWithReload(() => import('./pages/AggregateSettings.jsx'))
-const Settings = lazyWithReload(() => import('./pages/Settings.jsx'))
+const Assessment = lazyWithReload(
+  () => import('./pages/client/Assessment.jsx')
+)
 
-const NewClient = lazyWithReload(() => import('./pages/NewClient.jsx'))
-const GenerateQuotation = lazyWithReload(() => import('./pages/GenerateQuotation.jsx'))
-const Checkout = lazyWithReload(() => import('./pages/Checkout.jsx'))
-const Notifications = lazyWithReload(() => import('./pages/Notifications.jsx'))
+const TrackRequest = lazyWithReload(
+  () => import('./pages/client/TrackRequest.jsx')
+)
 
-const PartnerHome = lazyWithReload(() => import('./pages/partner/PartnerHome.jsx'))
-const MyClients = lazyWithReload(() => import('./pages/partner/MyClients.jsx'))
-const PayForClient = lazyWithReload(() => import('./pages/partner/PayForClient.jsx'))
-const PartnerCommissions = lazyWithReload(() => import('./pages/partner/PartnerCommissions.jsx'))
-const PartnerBankDetails = lazyWithReload(() => import('./pages/partner/PartnerBankDetails.jsx'))
-const PartnerProfile = lazyWithReload(() => import('./pages/partner/PartnerProfile.jsx'))
+/* =========================
+   AUTH
+========================= */
 
-const NotFound = lazyWithReload(() => import('./pages/NotFound.jsx'))
+const Login = lazyWithReload(
+  () => import('./pages/Login.jsx')
+)
+
+/* =========================
+   SUPER ADMIN PAGES
+========================= */
+
+const Dashboard = lazyWithReload(
+  () => import('./pages/Dashboard.jsx')
+)
+
+const ClientRecords = lazyWithReload(
+  () => import('./pages/ClientRecords.jsx')
+)
+
+const Requests = lazyWithReload(
+  () => import('./pages/Requests.jsx')
+)
+
+const PricingDatabase = lazyWithReload(
+  () => import('./pages/PricingDatabase.jsx')
+)
+
+const RulesPage = lazyWithReload(
+  () => import('./pages/RulesPage.jsx')
+)
+
+const Administrators = lazyWithReload(
+  () => import('./pages/Administrators.jsx')
+)
+
+const AggregateSettings = lazyWithReload(
+  () => import('./pages/AggregateSettings.jsx')
+)
+
+const Settings = lazyWithReload(
+  () => import('./pages/Settings.jsx')
+)
+
+const PaymentAccounts = lazyWithReload(
+  () => import('./pages/PaymentAccounts.jsx')
+)
+
+/* =========================
+   SHARED / ADMIN ACTION PAGES
+========================= */
+
+const NewClient = lazyWithReload(
+  () => import('./pages/NewClient.jsx')
+)
+
+const GenerateQuotation = lazyWithReload(
+  () => import('./pages/GenerateQuotation.jsx')
+)
+
+const Checkout = lazyWithReload(
+  () => import('./pages/Checkout.jsx')
+)
+
+const Notifications = lazyWithReload(
+  () => import('./pages/Notifications.jsx')
+)
+
+/* =========================
+   PARTNER PAGES
+========================= */
+
+const PartnerHome = lazyWithReload(
+  () => import('./pages/partner/PartnerHome.jsx')
+)
+
+const MyClients = lazyWithReload(
+  () => import('./pages/partner/MyClients.jsx')
+)
+
+const PayForClient = lazyWithReload(
+  () => import('./pages/partner/PayForClient.jsx')
+)
+
+const PartnerCommissions = lazyWithReload(
+  () => import('./pages/partner/PartnerCommissions.jsx')
+)
+
+const PartnerBankDetails = lazyWithReload(
+  () => import('./pages/partner/PartnerBankDetails.jsx')
+)
+
+const PartnerProfile = lazyWithReload(
+  () => import('./pages/partner/PartnerProfile.jsx')
+)
+
+/* =========================
+   FALLBACK
+========================= */
+
+const NotFound = lazyWithReload(
+  () => import('./pages/NotFound.jsx')
+)
 
 function PageFallback() {
   return (
@@ -63,19 +157,45 @@ function PageFallback() {
   )
 }
 
+/* =========================
+   SUPER ADMIN HOME GUARD
+========================= */
+
 function AdminHome() {
   const { isSuperAdmin, loading } = useAuth()
-  if (loading) return <PageFallback />
-  if (!isSuperAdmin) return <Navigate to="/partner" replace />
+
+  if (loading) {
+    return <PageFallback />
+  }
+
+  if (!isSuperAdmin) {
+    return <Navigate to="/partner" replace />
+  }
+
   return <Dashboard />
 }
 
+/* =========================
+   PARTNER HOME GUARD
+========================= */
+
 function PartnerHomeGuard() {
   const { isSuperAdmin, loading } = useAuth()
-  if (loading) return <PageFallback />
-  if (isSuperAdmin) return <Navigate to="/admin" replace />
+
+  if (loading) {
+    return <PageFallback />
+  }
+
+  if (isSuperAdmin) {
+    return <Navigate to="/admin" replace />
+  }
+
   return <PartnerHome />
 }
+
+/* =========================
+   APP
+========================= */
 
 export default function App() {
   if (!isSupabaseConfigured) {
@@ -84,51 +204,285 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      {/* PERFORMANCE FIX: NotificationProvider now wraps the whole app ONCE,
-          for its entire lifetime, instead of being re-created inside every
-          single route - that used to tear down and re-open a Realtime
-          WebSocket connection on every page navigation, which was the main
-          cause of the app feeling sluggish. It now only
-          subscribes/unsubscribes when you actually log in or out. */}
+      {/*
+        NotificationProvider wraps the whole app ONCE.
+        This prevents Supabase Realtime from being recreated
+        every time the user navigates between pages.
+      */}
       <NotificationProvider>
         <Suspense fallback={<PageFallback />}>
           <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/check-eligibility" element={<Assessment />} />
-            <Route path="/request-assistance" element={<Assessment />} />
-            <Route path="/track-request" element={<TrackRequest />} />
 
-            <Route path="/admin/login" element={<Login />} />
+            {/* =========================
+                PUBLIC / CLIENT ROUTES
+            ========================= */}
 
-            <Route path="/admin" element={<ProtectedRoute><AdminHome /></ProtectedRoute>} />
-            <Route path="/admin/requests" element={<ProtectedRoute requireSuperAdmin><Requests /></ProtectedRoute>} />
-            <Route path="/admin/clients" element={<ProtectedRoute requireSuperAdmin><ClientRecords /></ProtectedRoute>} />
-            <Route path="/admin/new-client" element={<ProtectedRoute requireSuperAdmin><NewClient /></ProtectedRoute>} />
-            <Route path="/admin/quotation" element={<ProtectedRoute requireSuperAdmin><GenerateQuotation /></ProtectedRoute>} />
-            <Route path="/admin/payments" element={<ProtectedRoute requireSuperAdmin><Checkout /></ProtectedRoute>} />
-            <Route path="/admin/notifications" element={<ProtectedRoute requireSuperAdmin><Notifications /></ProtectedRoute>} />
-            <Route path="/admin/pricing" element={<ProtectedRoute requireSuperAdmin><PricingDatabase /></ProtectedRoute>} />
-            <Route path="/admin/benchmarks" element={<ProtectedRoute requireSuperAdmin><PricingDatabase /></ProtectedRoute>} />
-            <Route path="/admin/rules" element={<ProtectedRoute requireSuperAdmin><RulesPage /></ProtectedRoute>} />
-            <Route path="/admin/aggregate-settings" element={<ProtectedRoute requireSuperAdmin><AggregateSettings /></ProtectedRoute>} />
-            <Route path="/admin/administrators" element={<ProtectedRoute requireSuperAdmin><Administrators /></ProtectedRoute>} />
-            <Route path="/admin/settings" element={<ProtectedRoute requireSuperAdmin><Settings /></ProtectedRoute>} />
+            <Route
+              path="/"
+              element={<Landing />}
+            />
 
-            <Route path="/partner" element={<ProtectedRoute><PartnerHomeGuard /></ProtectedRoute>} />
-            <Route path="/partner/new-client" element={<ProtectedRoute><NewClient /></ProtectedRoute>} />
-            <Route path="/partner/eligibility-checker" element={<ProtectedRoute><GenerateQuotation /></ProtectedRoute>} />
-            <Route path="/partner/my-clients" element={<ProtectedRoute><MyClients title="My Clients" /></ProtectedRoute>} />
-            <Route path="/partner/my-requests" element={<ProtectedRoute><MyClients title="My Requests" /></ProtectedRoute>} />
-            <Route path="/partner/pay-for-client" element={<ProtectedRoute><PayForClient /></ProtectedRoute>} />
-            <Route path="/partner/commissions" element={<ProtectedRoute><PartnerCommissions /></ProtectedRoute>} />
-            <Route path="/partner/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
-            <Route path="/partner/bank-details" element={<ProtectedRoute><PartnerBankDetails /></ProtectedRoute>} />
-            <Route path="/partner/profile" element={<ProtectedRoute><PartnerProfile /></ProtectedRoute>} />
+            <Route
+              path="/check-eligibility"
+              element={<Assessment />}
+            />
 
-            <Route path="*" element={<NotFound />} />
+            <Route
+              path="/request-assistance"
+              element={<Assessment />}
+            />
+
+            <Route
+              path="/track-request"
+              element={<TrackRequest />}
+            />
+
+            {/* =========================
+                LOGIN
+            ========================= */}
+
+            <Route
+              path="/admin/login"
+              element={<Login />}
+            />
+
+            {/* =========================
+                SUPER ADMIN ROUTES
+            ========================= */}
+
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <AdminHome />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/requests"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <Requests />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/clients"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <ClientRecords />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/new-client"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <NewClient />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/quotation"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <GenerateQuotation />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/payments"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <Checkout />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/payment-accounts"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <PaymentAccounts />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/notifications"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <Notifications />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/pricing"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <PricingDatabase />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/benchmarks"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <PricingDatabase />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/rules"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <RulesPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/aggregate-settings"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <AggregateSettings />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/administrators"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <Administrators />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/settings"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <Settings />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* =========================
+                PARTNER ROUTES
+            ========================= */}
+
+            <Route
+              path="/partner"
+              element={
+                <ProtectedRoute>
+                  <PartnerHomeGuard />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/partner/new-client"
+              element={
+                <ProtectedRoute>
+                  <NewClient />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/partner/eligibility-checker"
+              element={
+                <ProtectedRoute>
+                  <GenerateQuotation />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/partner/my-clients"
+              element={
+                <ProtectedRoute>
+                  <MyClients title="My Clients" />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/partner/my-requests"
+              element={
+                <ProtectedRoute>
+                  <MyClients title="My Requests" />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/partner/pay-for-client"
+              element={
+                <ProtectedRoute>
+                  <PayForClient />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/partner/commissions"
+              element={
+                <ProtectedRoute>
+                  <PartnerCommissions />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/partner/notifications"
+              element={
+                <ProtectedRoute>
+                  <Notifications />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/partner/bank-details"
+              element={
+                <ProtectedRoute>
+                  <PartnerBankDetails />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/partner/profile"
+              element={
+                <ProtectedRoute>
+                  <PartnerProfile />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* =========================
+                404
+            ========================= */}
+
+            <Route
+              path="*"
+              element={<NotFound />}
+            />
+
           </Routes>
         </Suspense>
       </NotificationProvider>
     </ErrorBoundary>
   )
 }
+```
