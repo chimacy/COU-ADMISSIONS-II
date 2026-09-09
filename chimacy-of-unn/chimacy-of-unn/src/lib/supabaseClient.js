@@ -6,7 +6,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 export const isSupabaseConfigured =
   Boolean(supabaseUrl) && Boolean(supabaseAnonKey)
 
-if (!isSupabaseConfigured) {true}
+if (!isSupabaseConfigured) {
   console.warn(
     'Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.'
   )
@@ -23,10 +23,8 @@ export const supabase = createClient(
     },
 
     realtime: {
-      // Keep the realtime connection from hanging indefinitely.
       timeout: 10000,
 
-      // Supabase automatically reconnects after temporary failures.
       reconnectAfterMs: (tries) => {
         const delays = [1000, 2000, 5000, 10000]
         return delays[tries - 1] || 10000
