@@ -111,7 +111,14 @@ export default function App() {
             <Route path="/admin/pricing" element={<ProtectedRoute requireSuperAdmin><PricingDatabase /></ProtectedRoute>} />
             <Route path="/admin/benchmarks" element={<ProtectedRoute requireSuperAdmin><PricingDatabase /></ProtectedRoute>} />
             <Route path="/admin/rules" element={<ProtectedRoute requireSuperAdmin><RulesPage /></ProtectedRoute>} />
-            <Route path="/admin/payment-accounts" element={<ProtectedRoute requireSuperAdmin><PaymentAccounts /></ProtectedRoute>} />
+            <Route
+  path="/admin/payment-accounts"
+  element={
+    <ProtectedRoute requireSuperAdmin>
+      <PaymentAccounts />
+    </ProtectedRoute>
+  }
+/>
             <Route path="/admin/aggregate-settings" element={<ProtectedRoute requireSuperAdmin><AggregateSettings /></ProtectedRoute>} />
             <Route path="/admin/administrators" element={<ProtectedRoute requireSuperAdmin><Administrators /></ProtectedRoute>} />
             <Route path="/admin/settings" element={<ProtectedRoute requireSuperAdmin><Settings /></ProtectedRoute>} />
