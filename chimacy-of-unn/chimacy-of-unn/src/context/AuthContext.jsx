@@ -10,6 +10,8 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  // Load the user's profile only.
+  // IMPORTANT: This function NEVER updates last_login.
   const loadProfile = useCallback(async (userId, userEmail) => {
     if (!userId) {
       setProfile(null)
@@ -39,8 +41,8 @@ export function AuthProvider({ children }) {
   }, [])
 
   useEffect(() => {
-    // Restore an existing session on page load/refresh.
-    // IMPORTANT: This NEVER updates last_login.
+    // Restore an existing session on page load or refresh.
+    // This MUST NOT update last_login.
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
 
@@ -59,9 +61,13 @@ export function AuthProvider({ children }) {
         setSession(newSession)
 
         if (newSession?.user) {
-          // Auth state changes such as INITIAL_SESSION,
-          // TOKEN_REFRESHED, and session restoration must NEVER
-          // update last_login or create a login notification.
+          // IMPORTANT:
+          // Auth state events such as INITIAL_SESSION,
+          // TOKEN_REFRESHED, and session restoration only load
+          // the profile. They NEVER update last_login.
+          //
+          // This prevents a Partner opening or refreshing the
+          // Partner page from generating a login notification.
           loadProfile(
             newSession.user.id,
             newSession.user.email,
@@ -76,23 +82,25 @@ export function AuthProvider({ children }) {
   }, [loadProfile])
 
   const login = useCallback(async (email, password) => {
+    // Authenticate first.
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
-    // If login failed, do absolutely nothing else.
+    // Failed login:
+    // Do NOT update last_login and do NOT trigger a login notification.
     if (error) throw error
 
-    // The login was successful.
+    // Authentication succeeded.
     setSession(data.session)
 
     // IMPORTANT:
-    // This is now the ONLY place in the application where
-    // last_login is updated.
+    // This is the ONLY place in AuthContext where last_login
+    // is updated.
     //
-    // Therefore, the existing database notification mechanism
-    // can only interpret an actual successful Sign In as a login.
+    // Therefore, the "Partner logged in" database notification
+    // can only be triggered by an actual successful Sign In.
     if (data.user) {
       const { data: updatedProfile } = await supabase
         .from('admin_profiles')
@@ -106,6 +114,8 @@ export function AuthProvider({ children }) {
       if (updatedProfile) {
         setProfile(updatedProfile)
       } else {
+        // If the profile somehow does not exist yet,
+        // loadProfile will create/load it as before.
         await loadProfile(
           data.user.id,
           data.user.email,
@@ -127,20 +137,30 @@ export function AuthProvider({ children }) {
     user: session?.user || null,
     profile,
     role: profile?.role || null,
+
     isSuperAdmin:
       profile?.role === 'super_admin' &&
       profile?.status === 'active',
+
     isPartner:
       profile?.role === 'partner' &&
       profile?.status === 'active',
-    isActive: profile ? profile.status === 'active' : true,
+
+    isActive:
+      profile ? profile.status === 'active' : true,
+
     isAuthenticated: !!session,
     loading,
+
     login,
     logout,
+
     refetchProfile: () => (
       session?.user
-        ? loadProfile(session.user.id, session.user.email)
+        ? loadProfile(
+            session.user.id,
+            session.user.email,
+          )
         : Promise.resolve()
     ),
   }
