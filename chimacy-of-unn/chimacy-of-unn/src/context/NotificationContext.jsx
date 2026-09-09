@@ -1,4 +1,3 @@
-```jsx
 import React, {
   createContext,
   useContext,
@@ -209,12 +208,11 @@ export function NotificationProvider({ children }) {
         const browserNotification = new Notification(
           notification.title || 'COU Admission Service',
           {
-            body: notification.body || 'You have a new notification.',
-            tag: notification.id
-              ? `notification-${notification.id}`
-              : 'chimacy-notification',
-            icon: '/favicon.ico',
-            badge: '/favicon.ico',
+           body: notification.body || 'You have a new notification.',
+tag: notification.id
+  ? `notification-${notification.id}`
+  : 'chimacy-notification',
+icon: '/favicon.ico',
             renotify: true,
           }
         )
