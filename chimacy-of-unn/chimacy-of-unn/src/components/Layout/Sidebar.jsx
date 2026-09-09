@@ -1,33 +1,31 @@
-import React, { memo } from 'react'
+import React, { memo, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, UserPlus, Users, FileText, Database, Settings, GraduationCap,
   X, ScrollText, CreditCard, LogOut, Inbox, ShieldCheck, Calculator, Bell, Sparkles,
-  Wallet, UserCircle,
+  Wallet, UserCircle, Landmark,
 } from 'lucide-react'
 import { useSettings } from '../../context/SettingsContext.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
+import Modal from '../UI/Modal.jsx'
 
-// Super Admin sees everything.
 const superAdminLinks = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/admin/requests', label: 'Assistance Requests', icon: Inbox },
   { to: '/admin/notifications', label: 'Notifications', icon: Bell },
   { to: '/admin/new-client', label: 'New Client', icon: UserPlus },
   { to: '/admin/clients', label: 'Client Records', icon: Users },
-  { to: '/admin/quotation', label: 'Eligibility Checker', icon: FileText },
-  { to: '/admin/payments', label: 'Payments Confirmation', icon: CreditCard },
+  { to: '/admin/quotation', label: 'Generate Quotation', icon: FileText },
+  { to: '/admin/payments', label: 'Checkout & Invoices', icon: CreditCard },
   { to: '/admin/pricing', label: 'Pricing Database', icon: Database },
   { to: '/admin/rules', label: 'Rules', icon: ScrollText },
   { to: '/admin/aggregate-settings', label: 'Aggregate Settings', icon: Calculator },
-  { to: '/admin/administrators', label: 'Partners', icon: ShieldCheck },
+  { to: '/admin/administrators', label: 'Partners & Admins', icon: ShieldCheck },
+  { to: '/admin/payment-accounts', label: 'Payment Accounts', icon: Landmark },
   { to: '/admin/settings', label: 'Settings', icon: Settings },
 ]
 
-// Partner navigation - only their own operational tools, nothing
-// business-wide. No Dashboard, no Assistance Requests, no Client Records.
 const partnerLinks = [
-  { to: '/partner', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/partner/new-client', label: 'Register New Client', icon: UserPlus },
   { to: '/partner/eligibility-checker', label: 'Eligibility Checker', icon: Sparkles },
   { to: '/partner/my-clients', label: 'My Clients', icon: Users },
@@ -35,7 +33,7 @@ const partnerLinks = [
   { to: '/partner/pay-for-client', label: 'Payment for Client', icon: CreditCard },
   { to: '/partner/commissions', label: 'My Commissions', icon: Wallet },
   { to: '/partner/notifications', label: 'Notifications', icon: Bell },
-  { to: '/partner/bank-details', label: 'Payment/Bank Details', icon: Database },
+  { to: '/partner/bank-details', label: 'Payment/Bank Details', icon: Landmark },
   { to: '/partner/profile', label: 'Profile', icon: UserCircle },
 ]
 
@@ -45,10 +43,13 @@ function Sidebar({ open, onClose }) {
     user, profile, isSuperAdmin, logout,
   } = useAuth()
   const navigate = useNavigate()
+  const [confirmingLogout, setConfirmingLogout] = useState(false)
 
   const links = isSuperAdmin ? superAdminLinks : partnerLinks
 
-  async function handleLogout() {
+  async function handleConfirmLogout() {
+    setConfirmingLogout(false)
+    onClose?.()
     await logout()
     navigate('/admin/login')
   }
@@ -121,7 +122,7 @@ function Sidebar({ open, onClose }) {
                 )}
               </div>
             )}
-            <button onClick={handleLogout} className="btn-ghost w-full !justify-start text-red-600">
+            <button onClick={() => setConfirmingLogout(true)} className="btn-ghost w-full !justify-start text-red-600">
               <LogOut className="h-4 w-4" /> Sign Out
             </button>
             <p className="text-[11px] text-slate-400 text-center">
@@ -130,6 +131,21 @@ function Sidebar({ open, onClose }) {
           </div>
         </div>
       </aside>
+
+      <Modal
+        open={confirmingLogout}
+        onClose={() => setConfirmingLogout(false)}
+        title="Sign Out"
+        size="sm"
+        footer={
+          <>
+            <button className="btn-secondary" onClick={() => setConfirmingLogout(false)}>Cancel</button>
+            <button className="btn-danger" onClick={handleConfirmLogout}><LogOut className="h-4 w-4" /> Sign Out</button>
+          </>
+        }
+      >
+        <p className="text-sm text-slate-600">Are you sure you want to sign out?</p>
+      </Modal>
     </>
   )
 }
