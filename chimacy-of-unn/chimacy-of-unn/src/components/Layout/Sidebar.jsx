@@ -26,7 +26,7 @@ const superAdminLinks = [
 ]
 
 const partnerLinks = [
-   { to: '/partner/', label: 'Dashboard', icon: LayoutDashboard },
+   { to: '/partner/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/partner/new-client', label: 'Register New Client', icon: UserPlus },
   { to: '/partner/eligibility-checker', label: 'Eligibility Checker', icon: Sparkles },
   { to: '/partner/my-clients', label: 'My Clients', icon: Users },
