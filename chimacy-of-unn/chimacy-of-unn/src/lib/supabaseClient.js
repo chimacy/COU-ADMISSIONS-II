@@ -3,8 +3,19 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+console.log('SUPABASE URL:', supabaseUrl)
+console.log(
+  'SUPABASE KEY EXISTS:',
+  Boolean(supabaseAnonKey)
+)
+console.log(
+  'SUPABASE KEY LENGTH:',
+  supabaseAnonKey?.length || 0
+)
+
 export const isSupabaseConfigured =
-  Boolean(supabaseUrl) && Boolean(supabaseAnonKey)
+  Boolean(supabaseUrl?.trim()) &&
+  Boolean(supabaseAnonKey?.trim())
 
 if (!isSupabaseConfigured) {
   console.warn(
