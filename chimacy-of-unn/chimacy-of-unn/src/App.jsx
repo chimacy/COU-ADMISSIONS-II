@@ -88,6 +88,10 @@ const Settings = lazyWithReload(
   () => import('./pages/Settings.jsx')
 )
 
+/* =========================
+   PAYMENT ACCOUNTS
+========================= */
+
 const PaymentAccounts = lazyWithReload(
   () => import('./pages/PaymentAccounts.jsx')
 )
@@ -204,9 +208,9 @@ export default function App() {
   return (
     <ErrorBoundary>
       {/*
-        NotificationProvider wraps the whole app ONCE.
-        This prevents Supabase Realtime from being recreated
-        every time the user navigates between pages.
+        NotificationProvider wraps the whole application once.
+        This prevents the Supabase Realtime connection from being
+        recreated on every page navigation.
       */}
       <NotificationProvider>
         <Suspense fallback={<PageFallback />}>
@@ -303,6 +307,7 @@ export default function App() {
               }
             />
 
+            {/* PAYMENT ACCOUNTS */}
             <Route
               path="/admin/payment-accounts"
               element={
@@ -484,4 +489,3 @@ export default function App() {
     </ErrorBoundary>
   )
 }
-```
