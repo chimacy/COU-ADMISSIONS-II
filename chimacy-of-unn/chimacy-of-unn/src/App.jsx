@@ -79,7 +79,7 @@ function PartnerHomeGuard() {
 }
 
 export default function App() {
-  if (!isSupabaseConfigured) {
+  if (isSupabaseConfigured) {
     return <ConfigNeeded />
   }
 
