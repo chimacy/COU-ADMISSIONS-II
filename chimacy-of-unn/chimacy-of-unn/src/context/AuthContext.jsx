@@ -10,7 +10,7 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  const loadProfile = useCallback(async (userId, userEmail) => {
+  const loadProfile = useCallback(async (userId, userEmail, touchLogin = false) => {
     if (!userId) {
       setProfile(null)
       return
@@ -18,36 +18,49 @@ export function AuthProvider({ children }) {
     let { data } = await supabase.from('admin_profiles').select('*').eq('id', userId).maybeSingle()
 
     if (!data) {
-      // First time this person has logged in - auto-provision their profile.
-      // A database trigger makes the very first admin_profiles row ever
-      // created a super_admin automatically (bootstrap); every profile
-      // after that defaults to 'partner' until a super admin changes it.
       const { data: created } = await supabase
         .from('admin_profiles')
         .insert({ id: userId, display_name: userEmail?.split('@')[0] || 'User' })
         .select()
         .maybeSingle()
       data = created
-    } else {
-      supabase.from('admin_profiles').update({ last_login: new Date().toISOString() }).eq('id', userId).then(() => {})
+    } else if (touchLogin) {
+      // IMPORTANT: last_login is only ever touched here, and only when
+      // `touchLogin` is explicitly true (a real sign-in action) - NOT on
+      // every page load/refresh, which just restores an existing session.
+      // Previously this ran unconditionally, which meant a Partner simply
+      // refreshing their browser looked identical to a fresh login and
+      // triggered a "Partner logged in" notification every single time.
+      const { data: touched } = await supabase
+        .from('admin_profiles')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', userId)
+        .select()
+        .maybeSingle()
+      if (touched) data = touched
     }
     setProfile(data)
   }, [])
 
   useEffect(() => {
+    // Restoring a session on page load/refresh - never touches last_login.
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
       if (data.session?.user) {
-        loadProfile(data.session.user.id, data.session.user.email).finally(() => setLoading(false))
+        loadProfile(data.session.user.id, data.session.user.email, false).finally(() => setLoading(false))
       } else {
         setLoading(false)
       }
     })
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession)
       if (newSession?.user) {
-        loadProfile(newSession.user.id, newSession.user.email)
+        // Only a genuine SIGNED_IN event (the person just typed their
+        // password and clicked Sign In) counts as a real login - events
+        // like INITIAL_SESSION and TOKEN_REFRESHED fire on ordinary page
+        // loads and must never be mistaken for a fresh login.
+        loadProfile(newSession.user.id, newSession.user.email, event === 'SIGNED_IN')
       } else {
         setProfile(null)
       }
@@ -81,7 +94,7 @@ export function AuthProvider({ children }) {
     loading,
     login,
     logout,
-    refetchProfile: () => (session?.user ? loadProfile(session.user.id, session.user.email) : Promise.resolve()),
+    refetchProfile: () => (session?.user ? loadProfile(session.user.id, session.user.email, false) : Promise.resolve()),
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
