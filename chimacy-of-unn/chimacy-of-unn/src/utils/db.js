@@ -47,7 +47,6 @@ function mapProgrammeFromDb(row) {
     doubleBenchmark: row.double_benchmark,
     priceEstimated: row.price_estimated,
     benchmarkDefault: row.benchmark_default,
-    sourceCost: Number(row.source_cost) || 0,
   }
 }
 
@@ -64,16 +63,11 @@ function mapProgrammeToDb(p) {
     double_benchmark: p.doubleBenchmark || '',
     price_estimated: !!p.priceEstimated,
     benchmark_default: !!p.benchmarkDefault,
-    source_cost: Number(p.sourceCost) || 0,
   }
 }
 
 export const GRADE_ORDER = [
-  'First Grade',
-  'Second Grade Grade I',
-  'Second Grade Grade II',
-  'Third Grade',
-  'Fourth Grade',
+  'First Grade', 'Second Grade Grade I', 'Second Grade Grade II', 'Third Grade', 'Fourth Grade',
 ]
 
 /* ================================== RULES ================================== */
@@ -113,13 +107,23 @@ export async function deleteRule(id) {
 export async function getQuotations() {
   const { data, error } = await supabase.from('quotations').select('*').order('created_at', { ascending: false })
   if (error) throw error
-  return (data || []).map(mapQuotationFromDb)
+  const partnerNames = await getPartnerNameMap()
+  return (data || []).map((row) => mapQuotationFromDb(row, partnerNames))
 }
 
 export async function getQuotationById(id) {
   const { data, error } = await supabase.from('quotations').select('*').eq('id', id).maybeSingle()
   if (error) throw error
-  return data ? mapQuotationFromDb(data) : null
+  if (!data) return null
+  const partnerNames = await getPartnerNameMap()
+  return mapQuotationFromDb(data, partnerNames)
+}
+
+async function getPartnerNameMap() {
+  const { data } = await supabase.from('admin_profiles').select('id, display_name')
+  const map = {}
+  ;(data || []).forEach((p) => { map[p.id] = p.display_name })
+  return map
 }
 
 export async function saveQuotation(quotation) {
@@ -127,7 +131,7 @@ export async function saveQuotation(quotation) {
   if (quotation.id) {
     const { data, error } = await supabase.from('quotations').update(payload).eq('id', quotation.id).select().single()
     if (error) throw error
-    return mapQuotationFromDb(data)
+    return mapQuotationFromDb(data, {})
   }
   const { data: userData } = await supabase.auth.getUser()
   const { data, error } = await supabase
@@ -136,7 +140,7 @@ export async function saveQuotation(quotation) {
     .select()
     .single()
   if (error) throw error
-  return mapQuotationFromDb(data)
+  return mapQuotationFromDb(data, {})
 }
 
 export async function deleteQuotation(id) {
@@ -144,16 +148,45 @@ export async function deleteQuotation(id) {
   if (error) throw error
 }
 
-export async function markQuotationPaid(id, { amount, method, date }) {
-  const payload = {
-    paid: true,
-    paid_amount: amount,
-    payment_method: method,
-    paid_date: date,
-  }
-  const { data, error } = await supabase.from('quotations').update(payload).eq('id', id).select().single()
+export async function recordPayment(quotationId, { amount, method, date, note }) {
+  const { data: userData } = await supabase.auth.getUser()
+  const txRef = `manual-${quotationId}-${Date.now()}`
+  const { data, error } = await supabase.from('payments').insert({
+    quotation_id: quotationId,
+    amount,
+    currency: 'NGN',
+    tx_ref: txRef,
+    status: 'SUCCESSFUL',
+    verified: true,
+    verified_at: new Date().toISOString(),
+    payment_date: date,
+    receipt_note: note || '',
+    recorded_by: userData?.user?.id || null,
+  }).select().single()
   if (error) throw error
-  return mapQuotationFromDb(data)
+  return { ...data, method }
+}
+
+export async function getPaymentsForQuotation(quotationId) {
+  const { data, error } = await supabase.from('payments').select('*').eq('quotation_id', quotationId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+export async function getPendingPartnerPayments() {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('*, admin_profiles!payments_partner_id_fkey(display_name)')
+    .eq('status', 'PENDING')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+export async function confirmPendingPayment(paymentId) {
+  const { data, error } = await supabase.from('payments').update({ status: 'SUCCESSFUL', verified: true, verified_at: new Date().toISOString() }).eq('id', paymentId).select().single()
+  if (error) throw error
+  return data
 }
 
 export async function generateInvoiceNumber(id) {
@@ -162,10 +195,10 @@ export async function generateInvoiceNumber(id) {
   const invoiceNumber = `INV-${(existing?.quotationNumber || '').replace('CHM-', '') || Date.now()}`
   const { data, error } = await supabase.from('quotations').update({ invoice_number: invoiceNumber }).eq('id', id).select().single()
   if (error) throw error
-  return mapQuotationFromDb(data)
+  return mapQuotationFromDb(data, {})
 }
 
-function mapQuotationFromDb(row) {
+function mapQuotationFromDb(row, partnerNames = {}) {
   return {
     id: row.id,
     quotationNumber: row.quotation_number,
@@ -196,7 +229,7 @@ function mapQuotationFromDb(row) {
     updatedAt: row.updated_at,
     sourceType: row.source_type,
     partnerId: row.partner_id,
-    sourceCost: Number(row.source_cost) || 0,
+    partnerName: row.partner_id ? (partnerNames[row.partner_id] || 'Partner') : null,
   }
 }
 
@@ -220,11 +253,6 @@ function mapQuotationToDb(q) {
     remarks: q.remarks || '',
     quote_date: q.date || new Date().toISOString().slice(0, 10),
     rules_snapshot: q.rulesSnapshot || [],
-    source_cost: Number(q.sourceCost) || 0,
-    // NOTE: source_type/partner_id are intentionally NOT sent here - a
-    // database trigger (enforce_quotation_ownership) sets those based on
-    // who is actually authenticated, so a Partner can never spoof
-    // ownership by tampering with the request from the browser.
   }
 }
 
@@ -274,21 +302,13 @@ export async function updateRequestStatus(id, status) {
 }
 
 export async function getRequestStatusHistory(requestId) {
-  const { data, error } = await supabase
-    .from('request_status_history')
-    .select('*')
-    .eq('request_id', requestId)
-    .order('changed_at', { ascending: true })
+  const { data, error } = await supabase.from('request_status_history').select('*').eq('request_id', requestId).order('changed_at', { ascending: true })
   if (error) throw error
   return data || []
 }
 
 export async function getRequestNotes(requestId) {
-  const { data, error } = await supabase
-    .from('request_notes')
-    .select('*')
-    .eq('request_id', requestId)
-    .order('created_at', { ascending: false })
+  const { data, error } = await supabase.from('request_notes').select('*').eq('request_id', requestId).order('created_at', { ascending: false })
   if (error) throw error
   return data || []
 }
@@ -296,16 +316,9 @@ export async function getRequestNotes(requestId) {
 export async function addRequestNote(requestId, note) {
   const { data: userData } = await supabase.auth.getUser()
   const { data: profile } = await supabase.from('admin_profiles').select('display_name').eq('id', userData?.user?.id).maybeSingle()
-  const { data, error } = await supabase
-    .from('request_notes')
-    .insert({
-      request_id: requestId,
-      admin_id: userData?.user?.id || null,
-      admin_name: profile?.display_name || userData?.user?.email || 'Admin',
-      note,
-    })
-    .select()
-    .single()
+  const { data, error } = await supabase.from('request_notes').insert({
+    request_id: requestId, admin_id: userData?.user?.id || null, admin_name: profile?.display_name || userData?.user?.email || 'Admin', note,
+  }).select().single()
   if (error) throw error
   return data
 }
@@ -330,15 +343,15 @@ export async function acceptRequestAndConvert(request) {
     date: new Date().toISOString().slice(0, 10),
     rulesSnapshot: await getRules(),
   })
-
-  const { data, error } = await supabase
-    .from('requests')
-    .update({ status: 'ACCEPTED', linked_quotation_id: quotation.id })
-    .eq('id', request.id)
-    .select()
-    .single()
+  const { data, error } = await supabase.from('requests').update({ status: 'ACCEPTED', linked_quotation_id: quotation.id }).eq('id', request.id).select().single()
   if (error) throw error
   return { request: mapRequestFromDb(data), quotation }
+}
+
+export async function deleteRejectedRequests() {
+  const { data, error } = await supabase.from('requests').delete().eq('status', 'REJECTED').select()
+  if (error) throw error
+  return data?.length || 0
 }
 
 function mapRequestFromDb(row) {
@@ -382,7 +395,7 @@ export const REQUEST_STATUSES = [
   'PAYMENT_CONFIRMED', 'PROCESSING', 'COMPLETED', 'REJECTED', 'CANCELLED',
 ]
 
-/* ============================== ADMIN PROFILES (Administrators page, Super Admin only) ============================== */
+/* ============================== ADMIN PROFILES ============================== */
 
 export async function getAdminProfiles() {
   const { data, error } = await supabase.from('admin_profiles').select('*').order('created_at')
@@ -408,57 +421,28 @@ export async function getMyProfile() {
 
 export async function updateMyDisplayName(displayName) {
   const { data: userData } = await supabase.auth.getUser()
-  const { data, error } = await supabase
-    .from('admin_profiles')
-    .update({ display_name: displayName })
-    .eq('id', userData?.user?.id)
-    .select()
-    .single()
+  const { data, error } = await supabase.from('admin_profiles').update({ display_name: displayName }).eq('id', userData?.user?.id).select().single()
   if (error) throw error
   return data
 }
 
-/**
- * Proposes new bank details. This does NOT change the active payout
- * fields directly - a database trigger only allows a Partner to write into
- * pending_bank_details; a Super Admin must approve before it becomes active.
- */
 export async function proposeMyBankDetails({ accountName, bankName, accountNumber }) {
   const { data: userData } = await supabase.auth.getUser()
-  const { data, error } = await supabase
-    .from('admin_profiles')
-    .update({
-      pending_bank_details: {
-        account_name: accountName,
-        bank_name: bankName,
-        account_number: accountNumber,
-        requested_at: new Date().toISOString(),
-      },
-    })
-    .eq('id', userData?.user?.id)
-    .select()
-    .single()
+  const { data, error } = await supabase.from('admin_profiles').update({
+    pending_bank_details: { account_name: accountName, bank_name: bankName, account_number: accountNumber, requested_at: new Date().toISOString() },
+  }).eq('id', userData?.user?.id).select().single()
   if (error) throw error
   return data
 }
 
-/** Super Admin only: approves a partner's pending bank details, making them active. */
 export async function approvePendingBankDetails(partnerId) {
   const { data: partner, error: fetchError } = await supabase.from('admin_profiles').select('pending_bank_details').eq('id', partnerId).single()
   if (fetchError) throw fetchError
   const pending = partner?.pending_bank_details
   if (!pending) throw new Error('No pending bank details to approve.')
-  const { data, error } = await supabase
-    .from('admin_profiles')
-    .update({
-      bank_account_name: pending.account_name || '',
-      bank_name: pending.bank_name || '',
-      bank_account_number: pending.account_number || '',
-      pending_bank_details: null,
-    })
-    .eq('id', partnerId)
-    .select()
-    .single()
+  const { data, error } = await supabase.from('admin_profiles').update({
+    bank_account_name: pending.account_name || '', bank_name: pending.bank_name || '', bank_account_number: pending.account_number || '', pending_bank_details: null,
+  }).eq('id', partnerId).select().single()
   if (error) throw error
   return data
 }
@@ -472,32 +456,19 @@ export async function getMyCommissions() {
 }
 
 export async function getAllCommissions() {
-  const { data, error } = await supabase
-    .from('commissions')
-    .select('*, admin_profiles!commissions_partner_id_fkey(display_name)')
-    .order('created_at', { ascending: false })
+  const { data, error } = await supabase.from('commissions').select('*, admin_profiles!commissions_partner_id_fkey(display_name)').order('created_at', { ascending: false })
   if (error) throw error
   return data || []
 }
 
 export async function approveCommission(id) {
-  const { data, error } = await supabase
-    .from('commissions')
-    .update({ status: 'APPROVED', approved_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single()
+  const { data, error } = await supabase.from('commissions').update({ status: 'APPROVED', approved_at: new Date().toISOString() }).eq('id', id).select().single()
   if (error) throw error
   return data
 }
 
 export async function markCommissionPaid(id) {
-  const { data, error } = await supabase
-    .from('commissions')
-    .update({ status: 'PAID', paid_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single()
+  const { data, error } = await supabase.from('commissions').update({ status: 'PAID', paid_at: new Date().toISOString() }).eq('id', id).select().single()
   if (error) throw error
   return data
 }
@@ -509,12 +480,13 @@ export async function getPartnerSettings() {
 }
 
 export async function updateCommissionRate(rate) {
-  const { data, error } = await supabase
-    .from('partner_settings')
-    .update({ commission_rate: Number(rate) })
-    .eq('id', 1)
-    .select()
-    .single()
+  const { data, error } = await supabase.from('partner_settings').update({ commission_rate: Number(rate) }).eq('id', 1).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function updateGrossMargin(amount) {
+  const { data, error } = await supabase.from('partner_settings').update({ gross_margin_amount: Number(amount) }).eq('id', 1).select().single()
   if (error) throw error
   return data
 }
@@ -522,10 +494,8 @@ export async function updateCommissionRate(rate) {
 /* ============================== BACKUP (export only) ============================== */
 
 export async function exportAllData() {
-  const [programmes, rules, quotations, requests] = await Promise.all([
-    getProgrammes(), getRules(), getQuotations(), getRequests(),
-  ])
+  const [programmes, rules, quotations, requests] = await Promise.all([getProgrammes(), getRules(), getQuotations(), getRequests()])
   return {
     programmes, rules, quotations, requests, exportedAt: new Date().toISOString(),
   }
-}
+    }
