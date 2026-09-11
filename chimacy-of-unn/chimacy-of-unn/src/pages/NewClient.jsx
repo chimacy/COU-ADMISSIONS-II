@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Save, FileDown, Sparkles, RefreshCcw, Loader2 } from 'lucide-react'
+import { Save, FileDown, Sparkles, RefreshCcw, Loader2, Calculator } from 'lucide-react'
 import DashboardLayout from '../components/Layout/DashboardLayout.jsx'
 import Card from '../components/UI/Card.jsx'
 import { Input, Select, Textarea } from '../components/UI/FormField.jsx'
 import {
   getProgrammes, saveQuotation, getQuotationById, getRules,
 } from '../utils/db.js'
+import { getAssessmentConfig } from '../utils/publicApi.js'
+import { calculateAggregate } from '../utils/aggregate.js'
 import { evaluateCandidate, suggestAlternatives, statusBadgeStyle, WORKING_TYPE } from '../utils/evaluation.js'
 import { formatCurrency } from '../utils/format.js'
 import { useSettings } from '../context/SettingsContext.jsx'
@@ -17,6 +19,8 @@ async function downloadQuotationPDF(record, settings) {
   return mod.downloadQuotationPDF(record, settings)
 }
 
+const emptySubjects = Array.from({ length: 4 }, () => ({ subject: '', grade: '' }))
+
 const emptyForm = {
   clientName: '',
   parentName: '',
@@ -24,6 +28,8 @@ const emptyForm = {
   email: '',
   jambRegNumber: '',
   jambScore: '',
+  olevelSittings: 1,
+  subjects: emptySubjects,
   programmeId: '',
   category: 'New Application',
   workingTypeOverride: '',
@@ -39,11 +45,10 @@ export default function NewClient() {
   const { settings } = useSettings()
   const { isSuperAdmin } = useAuth()
 
-  // Where "Save" sends you afterward depends on your role - a Partner
-  // never has access to /admin/clients, so they land on their own list.
   const myClientsPath = isSuperAdmin ? '/admin/clients' : '/partner/my-clients'
 
   const [programmes, setProgrammes] = useState([])
+  const [config, setConfig] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [saved, setSaved] = useState(false)
   const [errors, setErrors] = useState({})
@@ -54,9 +59,10 @@ export default function NewClient() {
     let cancelled = false
     async function load() {
       try {
-        const list = await getProgrammes()
+        const [list, cfg] = await Promise.all([getProgrammes(), getAssessmentConfig()])
         if (cancelled) return
         setProgrammes(list)
+        setConfig(cfg)
         if (prefillProgrammeId && !editId) {
           setForm((f) => ({ ...f, programmeId: prefillProgrammeId }))
         }
@@ -70,6 +76,8 @@ export default function NewClient() {
               email: existing.email || '',
               jambRegNumber: existing.jambRegNumber || '',
               jambScore: existing.jambScore || '',
+              olevelSittings: 1,
+              subjects: emptySubjects,
               programmeId: existing.programmeId || '',
               category: existing.category || 'New Application',
               workingTypeOverride: existing.workingTypeOverride || '',
@@ -91,9 +99,24 @@ export default function NewClient() {
     [programmes, form.programmeId],
   )
 
+  const aggregateResult = useMemo(() => {
+    if (!config || !form.jambScore) return null
+    const complete = form.subjects.every((s) => s.subject && s.grade)
+    if (!complete) return null
+    return calculateAggregate({
+      jambScore: form.jambScore,
+      olevelSubjects: form.subjects,
+      olevelSittings: form.olevelSittings,
+      gradeConversion: config.grade_conversion,
+      aggregateSettings: config.aggregate_settings,
+    })
+  }, [config, form.jambScore, form.subjects, form.olevelSittings])
+
+  const effectiveScore = aggregateResult ? Math.round(aggregateResult.aggregate) : ''
+
   const evaluation = useMemo(
-    () => evaluateCandidate(selectedProgramme, form.jambScore),
-    [selectedProgramme, form.jambScore],
+    () => evaluateCandidate(selectedProgramme, effectiveScore),
+    [selectedProgramme, effectiveScore],
   )
 
   const finalPrice = useMemo(() => {
@@ -106,12 +129,21 @@ export default function NewClient() {
   const finalWorkingType = form.workingTypeOverride || evaluation.workingType
 
   const alternatives = useMemo(() => {
-    if (evaluation.status !== 'Not Eligible' || !form.jambScore) return []
-    return suggestAlternatives(programmes, form.jambScore, form.programmeId, 4)
-  }, [evaluation.status, programmes, form.jambScore, form.programmeId])
+    if (evaluation.status !== 'Not Eligible' || !effectiveScore) return []
+    return suggestAlternatives(programmes, effectiveScore, form.programmeId, 4)
+  }, [evaluation.status, programmes, effectiveScore, form.programmeId])
 
   const handleChange = (key) => (e) => {
     setForm((f) => ({ ...f, [key]: e.target.value }))
+    setSaved(false)
+  }
+
+  function updateSubjectSlot(index, field, value) {
+    setForm((f) => {
+      const next = [...f.subjects]
+      next[index] = { ...next[index], [field]: value }
+      return { ...f, subjects: next }
+    })
     setSaved(false)
   }
 
@@ -121,6 +153,7 @@ export default function NewClient() {
     if (!form.phone.trim()) errs.phone = 'Phone number is required'
     if (!form.programmeId) errs.programmeId = 'Select a programme'
     if (!form.jambScore) errs.jambScore = 'Enter JAMB score'
+    if (form.subjects.some((s) => !s.subject || !s.grade)) errs.subjects = "Select all 4 subjects and their O'Level grades to calculate the aggregate"
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -128,14 +161,20 @@ export default function NewClient() {
   async function buildQuotationRecord() {
     return {
       id: editId || undefined,
-      ...form,
+      clientName: form.clientName,
+      parentName: form.parentName,
+      phone: form.phone,
+      email: form.email,
+      jambRegNumber: form.jambRegNumber,
       jambScore: Number(form.jambScore),
+      category: form.category,
+      remarks: form.remarks,
+      date: form.date,
       programme: selectedProgramme?.name || '',
       programmeGrade: selectedProgramme?.grade || '',
       programmeId: selectedProgramme?.id || null,
       workingType: finalWorkingType,
       price: finalPrice,
-      sourceCost: selectedProgramme?.sourceCost || 0,
       status: evaluation.status,
       benchmarkStatus: evaluation.benchmarkStatus,
       recommendation: evaluation.recommendation,
@@ -175,6 +214,10 @@ export default function NewClient() {
     )
   }
 
+  const jambOptions = config?.jamb_subjects || []
+  const gradeOptions = Object.keys(config?.grade_conversion || {})
+  const chosenSubjects = form.subjects.map((s) => s.subject).filter(Boolean)
+
   return (
     <DashboardLayout title={editId ? 'Edit Client' : 'Register New Client'}>
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -190,20 +233,52 @@ export default function NewClient() {
             <Input label="Client Name" required value={form.clientName} onChange={handleChange('clientName')} error={errors.clientName} placeholder="e.g. Chidinma Okafor" />
             <Input label="Parent / Guardian Name (Optional)" value={form.parentName} onChange={handleChange('parentName')} placeholder="e.g. Mr. Okafor" />
             <Input label="Phone Number" required value={form.phone} onChange={handleChange('phone')} error={errors.phone} placeholder="e.g. 0803 000 0000" />
-            <Input label="Email" type="email" value={form.email} onChange={handleChange('email')} placeholder="e.g. client@email.com" />
+            <Input label="Email" type="email" required value={form.email} onChange={handleChange('email')} placeholder="e.g. client@email.com" />
             <Input label="JAMB Registration Number" value={form.jambRegNumber} onChange={handleChange('jambRegNumber')} placeholder="e.g. 20261234567AB" />
-            <Input label="JAMB Score" required type="number" min="0" max="400" value={form.jambScore} onChange={handleChange('jambScore')} error={errors.jambScore} placeholder="e.g. 272" />
             <Select label="Category" value={form.category} onChange={handleChange('category')}>
               <option>New Application</option>
               <option>Change of Course</option>
               <option>Supplementary</option>
               <option>Direct Entry</option>
             </Select>
-            <Select label="Working Type" value={form.workingTypeOverride} onChange={handleChange('workingTypeOverride')}>
-              <option value="">Auto-determine (recommended)</option>
-              <option value={WORKING_TYPE.SINGLE}>Single Working</option>
-              <option value={WORKING_TYPE.DOUBLE}>Double Working</option>
-            </Select>
+          </div>
+
+          <div className="glass-panel p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Calculator className="h-4 w-4 text-primary-600" />
+              <h4 className="font-bold text-sm text-slate-800">Aggregate Calculator</h4>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <Input label="JAMB Score" required type="number" min="0" max="400" value={form.jambScore} onChange={handleChange('jambScore')} error={errors.jambScore} placeholder="e.g. 272" />
+              <Select label="Number of O'Level Sittings" value={form.olevelSittings} onChange={handleChange('olevelSittings')}>
+                <option value={1}>One Sitting</option>
+                <option value={2}>Two Sittings</option>
+              </Select>
+            </div>
+
+            <p className="label-field">4 Subjects &amp; O'Level Grades</p>
+            <div className="space-y-2">
+              {form.subjects.map((row, i) => (
+                <div key={i} className="grid grid-cols-2 gap-2">
+                  <Select value={row.subject} onChange={(e) => updateSubjectSlot(i, 'subject', e.target.value)}>
+                    <option value="">-- Subject {i + 1} --</option>
+                    {jambOptions.map((s) => <option key={s} value={s} disabled={chosenSubjects.includes(s) && row.subject !== s}>{s}</option>)}
+                  </Select>
+                  <Select value={row.grade} onChange={(e) => updateSubjectSlot(i, 'grade', e.target.value)}>
+                    <option value="">-- Grade --</option>
+                    {gradeOptions.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </Select>
+                </div>
+              ))}
+            </div>
+            {errors.subjects && <p className="text-xs text-red-500 mt-1.5">{errors.subjects}</p>}
+
+            {aggregateResult && (
+              <div className="mt-3 pt-3 border-t border-primary-100 flex items-center justify-between">
+                <span className="text-xs text-slate-500">Calculated Aggregate (auto-fills eligibility below)</span>
+                <span className="font-bold text-lg text-primary-700">{aggregateResult.aggregate} / 400</span>
+              </div>
+            )}
           </div>
 
           <Select label="Programme / Course" required value={form.programmeId} onChange={handleChange('programmeId')} error={errors.programmeId}>
@@ -211,6 +286,12 @@ export default function NewClient() {
             {programmes.map((p) => (
               <option key={p.id} value={p.id}>{p.name} ({p.grade})</option>
             ))}
+          </Select>
+
+          <Select label="Working Type" value={form.workingTypeOverride} onChange={handleChange('workingTypeOverride')}>
+            <option value="">Auto-determine (recommended)</option>
+            <option value={WORKING_TYPE.SINGLE}>Single Working</option>
+            <option value={WORKING_TYPE.DOUBLE}>Double Working</option>
           </Select>
 
           <Input label="Date" type="date" value={form.date} onChange={handleChange('date')} />
@@ -237,8 +318,8 @@ export default function NewClient() {
               <h3 className="font-bold font-display">Smart Evaluation</h3>
             </div>
 
-            {!selectedProgramme ? (
-              <p className="text-sm text-white/80">Select a programme and enter a JAMB score to see the live eligibility evaluation.</p>
+            {!selectedProgramme || !aggregateResult ? (
+              <p className="text-sm text-white/80">Complete the aggregate calculator and select a programme to see the live eligibility evaluation.</p>
             ) : (
               <div className="space-y-4">
                 <div>
@@ -295,4 +376,4 @@ export default function NewClient() {
       </div>
     </DashboardLayout>
   )
-}
+      }
