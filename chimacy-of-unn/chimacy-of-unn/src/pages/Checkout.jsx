@@ -1,31 +1,37 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
-  CreditCard, Search, CheckCircle2, FileDown, FilePlus2, Receipt, Loader2, MessageCircle,
+  CreditCard, Search, CheckCircle2, FileDown, FilePlus2, Receipt, Loader2, Plus, Clock,
 } from 'lucide-react'
 import DashboardLayout from '../components/Layout/DashboardLayout.jsx'
 import Card from '../components/UI/Card.jsx'
 import Modal from '../components/UI/Modal.jsx'
 import { Input, Select } from '../components/UI/FormField.jsx'
-import { getQuotations, markQuotationPaid, generateInvoiceNumber } from '../utils/db.js'
+import {
+  getQuotations, recordPayment, generateInvoiceNumber, getPaymentsForQuotation,
+  getPendingPartnerPayments, confirmPendingPayment,
+} from '../utils/db.js'
 import { formatCurrency, formatDate } from '../utils/format.js'
 import { statusBadgeStyle, STATUS } from '../utils/evaluation.js'
 import { useSettings } from '../context/SettingsContext.jsx'
-import { buildWhatsAppLink, buildAdminOutreachMessage } from '../utils/whatsapp.js'
 
 export default function Checkout() {
   const { settings } = useSettings()
   const [quotations, setQuotations] = useState([])
+  const [pendingPayments, setPendingPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('eligible-unpaid')
-  const [paying, setPaying] = useState(null)
-  const [form, setForm] = useState({ amount: '', method: 'Bank Transfer', date: new Date().toISOString().slice(0, 10) })
+  const [recording, setRecording] = useState(null)
+  const [form, setForm] = useState({ amount: '', method: 'Bank Transfer', date: new Date().toISOString().slice(0, 10), note: '' })
   const [saving, setSaving] = useState(false)
+  const [history, setHistory] = useState(null)
   const [busyId, setBusyId] = useState(null)
 
   const refresh = () => {
     setLoading(true)
-    getQuotations().then(setQuotations).finally(() => setLoading(false))
+    Promise.all([getQuotations(), getPendingPartnerPayments()])
+      .then(([q, p]) => { setQuotations(q); setPendingPayments(p) })
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => { refresh() }, [])
@@ -38,31 +44,24 @@ export default function Checkout() {
       list = list.filter((q) => q.paid)
     }
     const q = query.trim().toLowerCase()
-    if (q) {
-      list = list.filter((r) =>
-        [r.clientName, r.quotationNumber, r.programme].filter(Boolean).some((f) => f.toLowerCase().includes(q)))
-    }
+    if (q) list = list.filter((r) => [r.clientName, r.quotationNumber, r.programme].filter(Boolean).some((f) => f.toLowerCase().includes(q)))
     return list
   }, [quotations, filter, query])
 
-  function openPay(record) {
-    setPaying(record)
-    setForm({ amount: record.price, method: 'Bank Transfer', date: new Date().toISOString().slice(0, 10) })
+  function openRecordPayment(record) {
+    const remaining = Math.max(0, record.price - record.paidAmount)
+    setRecording(record)
+    setForm({ amount: remaining, method: 'Bank Transfer', date: new Date().toISOString().slice(0, 10), note: '' })
   }
 
-  // FIXED: this now ONLY confirms payment. It does not generate or download
-  // anything. Generating and downloading an invoice are now separate,
-  // deliberate actions the admin takes afterward.
-  async function confirmPayment() {
-    if (!paying) return
+  async function handleRecordPayment() {
+    if (!recording) return
     setSaving(true)
     try {
-      await markQuotationPaid(paying.id, {
-        amount: Number(form.amount) || 0,
-        method: form.method,
-        date: form.date,
+      await recordPayment(recording.id, {
+        amount: Number(form.amount) || 0, method: form.method, date: form.date, note: form.note,
       })
-      setPaying(null)
+      setRecording(null)
       refresh()
     } catch (err) {
       alert(err.message || 'Failed to record payment.')
@@ -93,31 +92,56 @@ export default function Checkout() {
     }
   }
 
-  function handleWhatsApp(record) {
-    const message = buildAdminOutreachMessage({
-      clientFirstName: (record.clientName || '').split(' ')[0],
-      requestNumber: record.quotationNumber,
-      programmeName: record.programme,
-    })
-    window.open(buildWhatsAppLink(record.phone, message), '_blank')
+  async function openHistory(record) {
+    const payments = await getPaymentsForQuotation(record.id)
+    setHistory({ record, payments })
+  }
+
+  async function handleConfirmPending(payment) {
+    setBusyId(payment.id)
+    try {
+      await confirmPendingPayment(payment.id)
+      refresh()
+    } catch (err) {
+      alert(err.message || 'Failed to confirm payment.')
+    } finally {
+      setBusyId(null)
+    }
   }
 
   return (
     <DashboardLayout title="Checkout & Invoices">
       <div className="space-y-5">
+        {pendingPayments.length > 0 && (
+          <Card className="!bg-amber-50 !p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Clock className="h-4 w-4 text-amber-600" />
+              <h3 className="font-bold text-sm text-amber-800">Payments Awaiting Your Confirmation ({pendingPayments.length})</h3>
+            </div>
+            <div className="space-y-2">
+              {pendingPayments.map((p) => (
+                <div key={p.id} className="bg-white rounded-xl p-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-800">{p.client_name || 'Client'} — {formatCurrency(p.amount, settings.currency_symbol)}</p>
+                    <p className="text-xs text-slate-500">Declared by {p.admin_profiles?.display_name || 'a partner'} &middot; {formatDate(p.payment_date || p.created_at)}</p>
+                  </div>
+                  <button onClick={() => handleConfirmPending(p)} disabled={busyId === p.id} className="btn-primary !px-3 !py-1.5 !text-xs shrink-0">
+                    {busyId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Confirm
+                  </button>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
         <Card className="!p-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search clients..."
-              className="input-field !pl-10"
-            />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search clients..." className="input-field !pl-10" />
           </div>
           <Select value={filter} onChange={(e) => setFilter(e.target.value)} className="sm:w-64 shrink-0">
             <option value="eligible-unpaid">Eligible &amp; Awaiting Payment</option>
-            <option value="paid">Paid Clients</option>
+            <option value="paid">Fully Paid</option>
             <option value="all">All Records</option>
           </Select>
         </Card>
@@ -127,47 +151,57 @@ export default function Checkout() {
             <div className="text-center py-16"><Loader2 className="h-6 w-6 animate-spin text-primary-500 mx-auto" /></div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-16 px-4">
-              <CreditCard className="h-10 w-10 text-slate-300 dark:text-slate-700 mx-auto mb-2" />
-              <p className="text-sm text-slate-500 dark:text-slate-400">No records match this view.</p>
+              <CreditCard className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+              <p className="text-sm text-slate-500">No records match this view.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[900px]">
+              <table className="w-full text-sm min-w-[1000px]">
                 <thead>
-                  <tr className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 bg-primary-50/60 dark:bg-slate-800/50 border-b border-primary-100 dark:border-slate-700">
+                  <tr className="text-left text-xs uppercase tracking-wide text-slate-500 bg-primary-50/60 border-b border-primary-100">
                     <th className="px-4 py-3 font-semibold">Client</th>
+                    <th className="px-4 py-3 font-semibold">Source</th>
                     <th className="px-4 py-3 font-semibold">Programme</th>
                     <th className="px-4 py-3 font-semibold">Status</th>
-                    <th className="px-4 py-3 font-semibold">Amount Due</th>
-                    <th className="px-4 py-3 font-semibold">Payment</th>
+                    <th className="px-4 py-3 font-semibold">Price</th>
+                    <th className="px-4 py-3 font-semibold">Paid So Far</th>
                     <th className="px-4 py-3 font-semibold text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((r) => (
-                    <tr key={r.id} className="border-b border-slate-100 dark:border-slate-800 last:border-0">
-                      <td className="px-4 py-3 font-medium text-slate-800 dark:text-white">{r.clientName}</td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{r.programme}</td>
-                      <td className="px-4 py-3"><span className={`badge ${statusBadgeStyle(r.status)}`}>{r.status}</span></td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">{formatCurrency(r.price, settings.currency_symbol)}</td>
+                    <tr key={r.id} className="border-b border-slate-100 last:border-0">
+                      <td className="px-4 py-3 font-medium text-slate-800">{r.clientName}</td>
                       <td className="px-4 py-3">
-                        {r.paid ? (
-                          <span className="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
-                            <CheckCircle2 className="h-3 w-3" /> Paid {formatDate(r.paidDate)}
-                          </span>
+                        {r.sourceType === 'PARTNER' ? (
+                          <span className="badge bg-accent-100 text-accent-700 !text-[10px]">{r.partnerName || 'Partner'}</span>
                         ) : (
-                          <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">Pending</span>
+                          <span className="badge bg-slate-100 text-slate-500 !text-[10px]">Direct</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{r.programme}</td>
+                      <td className="px-4 py-3"><span className={`badge ${statusBadgeStyle(r.status)}`}>{r.status}</span></td>
+                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{formatCurrency(r.price, settings.currency_symbol)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {r.paid ? (
+                          <span className="badge bg-emerald-100 text-emerald-700"><CheckCircle2 className="h-3 w-3" /> Fully Paid</span>
+                        ) : r.paidAmount > 0 ? (
+                          <button onClick={() => openHistory(r)} className="badge bg-amber-100 text-amber-700">
+                            {formatCurrency(r.paidAmount, settings.currency_symbol)} of {formatCurrency(r.price, settings.currency_symbol)}
+                          </button>
+                        ) : (
+                          <span className="badge bg-slate-100 text-slate-400">Unpaid</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                          <button onClick={() => handleWhatsApp(r)} title="Contact on WhatsApp" className="btn-secondary !px-2.5 !py-1.5 !text-xs">
-                            <MessageCircle className="h-3.5 w-3.5" />
-                          </button>
                           {!r.paid && (
-                            <button onClick={() => openPay(r)} className="btn-primary !px-3 !py-1.5 !text-xs">
-                              <CreditCard className="h-3.5 w-3.5" /> Confirm Payment
+                            <button onClick={() => openRecordPayment(r)} className="btn-primary !px-3 !py-1.5 !text-xs">
+                              <Plus className="h-3.5 w-3.5" /> Record Payment
                             </button>
+                          )}
+                          {r.paidAmount > 0 && (
+                            <button onClick={() => openHistory(r)} className="btn-secondary !px-3 !py-1.5 !text-xs">History</button>
                           )}
                           {r.paid && !r.invoiceNumber && (
                             <button onClick={() => handleGenerateInvoice(r)} disabled={busyId === r.id} className="btn-secondary !px-3 !py-1.5 !text-xs">
@@ -176,7 +210,7 @@ export default function Checkout() {
                           )}
                           {r.paid && r.invoiceNumber && (
                             <button onClick={() => handleDownloadInvoice(r)} disabled={busyId === r.id} className="btn-secondary !px-3 !py-1.5 !text-xs">
-                              {busyId === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />} Download Invoice
+                              {busyId === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />} Invoice
                             </button>
                           )}
                         </div>
@@ -191,37 +225,71 @@ export default function Checkout() {
       </div>
 
       <Modal
-        open={!!paying}
-        onClose={() => setPaying(null)}
-        title="Confirm Payment"
+        open={!!recording}
+        onClose={() => setRecording(null)}
+        title="Record Payment"
         footer={
           <>
-            <button className="btn-secondary" onClick={() => setPaying(null)}>Cancel</button>
-            <button className="btn-primary" onClick={confirmPayment} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
-              Confirm Payment
+            <button className="btn-secondary" onClick={() => setRecording(null)}>Cancel</button>
+            <button className="btn-primary" onClick={handleRecordPayment} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />} Record Payment
             </button>
           </>
         }
       >
-        {paying && (
+        {recording && (
           <div className="space-y-4">
             <div className="glass-panel p-3">
-              <p className="text-sm font-semibold text-slate-800 dark:text-white">{paying.clientName}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{paying.programme} &middot; {paying.workingType}</p>
+              <p className="text-sm font-semibold text-slate-800">{recording.clientName}</p>
+              <p className="text-xs text-slate-500">
+                {recording.programme} &middot; Price {formatCurrency(recording.price, settings.currency_symbol)}
+                {recording.paidAmount > 0 && ` · Already paid ${formatCurrency(recording.paidAmount, settings.currency_symbol)}`}
+              </p>
             </div>
             <Input label="Amount Received (₦)" type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
             <Select label="Payment Method" value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}>
               <option>Bank Transfer</option>
               <option>Cash</option>
+              <option>Moniepoint</option>
+              <option>Opay</option>
               <option>POS / Card</option>
-              <option>Flutterwave (Online)</option>
             </Select>
             <Input label="Payment Date" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-            <p className="text-[11px] text-slate-400">This only marks the payment as confirmed. Invoice generation is a separate step afterward.</p>
+            <Input label="Receipt Note / Reference (optional)" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+            <p className="text-[11px] text-slate-400">
+              If this amount is less than the full price, it's recorded as an installment - the client stays "Unpaid" until the total received reaches the full price.
+            </p>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!history}
+        onClose={() => setHistory(null)}
+        title={history ? `Payment History — ${history.record.clientName}` : ''}
+      >
+        {history && (
+          <div className="space-y-3">
+            <div className="glass-panel p-3 flex items-center justify-between">
+              <span className="text-xs text-slate-500">Total Paid</span>
+              <span className="font-bold text-slate-800">{formatCurrency(history.record.paidAmount, settings.currency_symbol)} / {formatCurrency(history.record.price, settings.currency_symbol)}</span>
+            </div>
+            {history.payments.length === 0 ? (
+              <p className="text-sm text-slate-500 text-center py-6">No payments recorded yet.</p>
+            ) : (
+              history.payments.map((p) => (
+                <div key={p.id} className="glass-panel p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-800">{formatCurrency(p.amount, settings.currency_symbol)}</span>
+                    <span className={`badge !text-[10px] ${p.status === 'SUCCESSFUL' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{p.status}</span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">{formatDate(p.payment_date || p.created_at)} {p.receipt_note ? `· ${p.receipt_note}` : ''}</p>
+                </div>
+              ))
+            )}
           </div>
         )}
       </Modal>
     </DashboardLayout>
   )
-}
+    }
