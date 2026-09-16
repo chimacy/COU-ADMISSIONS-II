@@ -97,13 +97,10 @@ export function NotificationProvider({ children }) {
     }
   }, [])
 
-  function showPushNotification(notification) {
-    if (!pushEnabled || typeof Notification === 'undefined' || Notification.permission !== 'granted') return
-    try {
-      // eslint-disable-next-line no-new
-      new Notification(notification.title || 'New notification', { body: notification.body || '', tag: notification.id })
-    } catch (e) { /* some mobile browsers restrict this outside a service worker */ }
-  }
+  ffunction showPushNotification() {
+  // Browser push notifications are disabled.
+  // In-app notifications, toast alerts and sound remain active.
+}
 
   const enableSound = useCallback(() => {
     if (!audioCtxRef.current) {
