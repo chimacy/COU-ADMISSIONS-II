@@ -370,8 +370,41 @@ export async function getRequestById(id) {
 }
 
 export async function updateRequestStatus(id, status) {
-  const { data, error } = await supabase.from('requests').update({ status }).eq('id', id).select().single()
+  const { data, error } = await supabase
+    .from('requests')
+    .update({ status })
+    .eq('id', id)
+    .select()
+    .single()
+
   if (error) throw error
+
+  if (data?.partner_id && ['ACCEPTED', 'REJECTED'].includes(status)) {
+    const clientName = data.full_name || 'your client'
+
+    const notification = {
+      type: 'status_update',
+      title: status === 'ACCEPTED'
+        ? 'Assistance Request Approved'
+        : 'Assistance Request Rejected',
+      body: status === 'ACCEPTED'
+        ? `Your assistance request for ${clientName} has been approved. The client has been added to your client records.`
+        : `Your assistance request for ${clientName} has been rejected.`,
+      request_id: data.id,
+      read: false,
+      recipient_id: data.partner_id,
+      action_route: '/partner/my-requests',
+    }
+
+    const { error: notificationError } = await supabase
+      .from('notifications')
+      .insert(notification)
+
+    if (notificationError) {
+      console.error('Failed to create request notification:', notificationError)
+    }
+  }
+
   return mapRequestFromDb(data)
 }
 
