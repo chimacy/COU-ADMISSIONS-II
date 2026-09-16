@@ -21,9 +21,17 @@ export default function Notifications() {
   const navigate = useNavigate()
 
   function open(n) {
-    markAsRead(n.id)
-    if (n.request_id) navigate(`/admin/requests?open=${n.request_id}`)
+  markAsRead(n.id)
+
+  if (n.action_route) {
+    navigate(n.action_route)
+    return
   }
+
+  if (n.request_id) {
+    navigate(`/admin/requests?open=${n.request_id}`)
+  }
+}
 
   return (
     <DashboardLayout title="Notifications">
