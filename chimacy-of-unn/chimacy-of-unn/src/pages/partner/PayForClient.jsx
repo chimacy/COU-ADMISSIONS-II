@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useRef } from 'react'
 import {
-  CreditCard, Loader2, Search, CheckCircle2, Landmark, Copy,
+  CreditCard, Loader2, Search, CheckCircle2, Landmark, Copy, Upload, X, CheckCheck,
 } from 'lucide-react'
 import DashboardLayout from '../../components/Layout/DashboardLayout.jsx'
 import Card from '../../components/UI/Card.jsx'
 import Modal from '../../components/UI/Modal.jsx'
+import { Select } from '../../components/UI/FormField.jsx'
 import { getMyClients } from '../../utils/db.js'
 import { formatCurrency } from '../../utils/format.js'
 import { STATUS, statusBadgeStyle } from '../../utils/evaluation.js'
@@ -14,7 +15,7 @@ import { supabase } from '../../lib/supabaseClient.js'
 
 export default function PayForClient() {
   const { settings } = useSettings()
-  const { user, profile } = useAuth()
+  const { user } = useAuth()
   const [clients, setClients] = useState([])
   const [accounts, setAccounts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -22,6 +23,12 @@ export default function PayForClient() {
   const [paying, setPaying] = useState(null)
   const [declaring, setDeclaring] = useState(false)
   const [declaredIds, setDeclaredIds] = useState([])
+  const [paymentType, setPaymentType] = useState('FULL')
+  const [amount, setAmount] = useState('')
+  const [receiptFile, setReceiptFile] = useState(null)
+  const [uploadingReceipt, setUploadingReceipt] = useState(false)
+  const [copyToast, setCopyToast] = useState(false)
+  const copyTimerRef = useRef(null)
 
   const refresh = () => {
     setLoading(true)
@@ -40,18 +47,49 @@ export default function PayForClient() {
     return list
   }, [clients, query])
 
+  function openPayModal(client) {
+    setPaying(client)
+    setPaymentType('FULL')
+    setAmount(Math.max(0, client.price - client.paidAmount))
+    setReceiptFile(null)
+  }
+
+  function copyToClipboard(text) {
+    navigator.clipboard?.writeText(text)
+    setCopyToast(true)
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+    copyTimerRef.current = setTimeout(() => setCopyToast(false), 2200)
+  }
+
   async function handleDeclarePayment(account) {
+    if (!amount || Number(amount) <= 0) {
+      alert('Enter the amount you are paying.')
+      return
+    }
     setDeclaring(true)
     try {
+      let receiptPath = null
+      if (receiptFile) {
+        setUploadingReceipt(true)
+        const ext = receiptFile.name.split('.').pop()
+        receiptPath = `${user.id}/${paying.id}-${Date.now()}.${ext}`
+        const { error: uploadError } = await supabase.storage.from('payment-receipts').upload(receiptPath, receiptFile)
+        setUploadingReceipt(false)
+        if (uploadError) throw uploadError
+      }
+
       const txRef = `manual-${paying.id}-${Date.now()}`
       const { error } = await supabase.from('payments').insert({
         quotation_id: paying.id,
         partner_id: user?.id,
         client_name: paying.clientName,
-        amount: paying.price,
+        amount: Number(amount),
         currency: 'NGN',
         tx_ref: txRef,
         payment_date: new Date().toISOString().slice(0, 10),
+        payment_type: paymentType,
+        payment_method: account.provider,
+        receipt_url: receiptPath,
         recorded_by: user?.id,
       })
       if (error) throw error
@@ -62,10 +100,6 @@ export default function PayForClient() {
     } finally {
       setDeclaring(false)
     }
-  }
-
-  function copyToClipboard(text) {
-    navigator.clipboard?.writeText(text)
   }
 
   return (
@@ -109,7 +143,7 @@ export default function PayForClient() {
                         {declaredIds.includes(c.id) ? (
                           <span className="badge bg-emerald-100 text-emerald-700"><CheckCircle2 className="h-3 w-3" /> Awaiting confirmation</span>
                         ) : (
-                          <button onClick={() => setPaying(c)} className="btn-primary !px-3 !py-1.5 !text-xs">
+                          <button onClick={() => openPayModal(c)} className="btn-primary !px-3 !py-1.5 !text-xs">
                             <Landmark className="h-3.5 w-3.5" /> Pay for Client
                           </button>
                         )}
@@ -136,32 +170,71 @@ export default function PayForClient() {
           <div className="space-y-4">
             <div className="glass-panel p-3">
               <p className="text-sm font-semibold text-slate-800">{paying.clientName}</p>
-              <p className="text-xs text-slate-500">Amount to pay: <strong>{formatCurrency(paying.price, settings.currency_symbol)}</strong></p>
+              <p className="text-xs text-slate-500">Total Fee: <strong>{formatCurrency(paying.price, settings.currency_symbol)}</strong></p>
+            </div>
+
+            <Select label="Payment Type" value={paymentType} onChange={(e) => setPaymentType(e.target.value)}>
+              <option value="FULL">Full Payment</option>
+              <option value="INSTALLMENT">Installment Payment</option>
+            </Select>
+
+            <div>
+              <p className="label-field">Amount You're Paying (₦)</p>
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="input-field"
+                placeholder="e.g. 500000"
+              />
+            </div>
+
+            <div>
+              <p className="label-field">Payment Receipt (optional, JPG/PNG)</p>
+              {receiptFile ? (
+                <div className="glass-panel p-2.5 flex items-center justify-between">
+                  <span className="text-xs text-slate-600 truncate">{receiptFile.name}</span>
+                  <button onClick={() => setReceiptFile(null)} className="btn-ghost !p-1 rounded"><X className="h-3.5 w-3.5" /></button>
+                </div>
+              ) : (
+                <label className="btn-secondary w-full !text-xs cursor-pointer">
+                  <Upload className="h-3.5 w-3.5" /> Upload Receipt Image
+                  <input type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" onChange={(e) => setReceiptFile(e.target.files?.[0] || null)} />
+                </label>
+              )}
             </div>
 
             {accounts.length === 0 ? (
               <p className="text-sm text-slate-500">No payment accounts have been configured yet. Contact your Super Admin.</p>
             ) : (
               <div className="space-y-3">
-                <p className="text-xs text-slate-500">Send the payment to any of the accounts below, then confirm you've sent it.</p>
+                <p className="text-xs text-slate-500">Send the payment to any account below, then confirm you've sent it.</p>
                 {accounts.map((acc) => (
-                  <div key={acc.id} className="glass-panel p-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="badge bg-primary-50 text-primary-700 !text-[10px]">{acc.provider}</span>
+                  <div key={acc.id} className="glass-panel p-4">
+                    <span className="badge bg-primary-50 text-primary-700 !text-[10px] mb-2 inline-block">{acc.provider}</span>
+
+                    <p className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">Account Number</p>
+                    <div className="flex items-center gap-2 mb-2">
+                      <p className="text-2xl font-bold font-display text-slate-800 tracking-wide">{acc.account_number}</p>
+                      <button onClick={() => copyToClipboard(acc.account_number)} className="btn-ghost !p-1.5 rounded-lg shrink-0"><Copy className="h-4 w-4" /></button>
                     </div>
-                    <p className="text-sm font-semibold text-slate-800">{acc.account_name}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <p className="text-sm text-slate-600 font-mono">{acc.account_number}</p>
-                      <button onClick={() => copyToClipboard(acc.account_number)} className="btn-ghost !p-1 rounded"><Copy className="h-3 w-3" /></button>
-                    </div>
-                    {acc.bank_name && <p className="text-xs text-slate-400">{acc.bank_name}</p>}
+
+                    <p className="text-xs text-slate-500">Account Name</p>
+                    <p className="text-sm font-medium text-slate-700 mb-1">{acc.account_name}</p>
+                    {acc.bank_name && (
+                      <>
+                        <p className="text-xs text-slate-500">Bank Name</p>
+                        <p className="text-sm font-medium text-slate-700">{acc.bank_name}</p>
+                      </>
+                    )}
+
                     <button
                       onClick={() => handleDeclarePayment(acc)}
                       disabled={declaring}
                       className="btn-secondary w-full mt-3 !text-xs"
                     >
                       {declaring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                      I've Sent This Payment via {acc.provider}
+                      {uploadingReceipt ? 'Uploading receipt...' : `I've Sent This Payment via ${acc.provider}`}
                     </button>
                   </div>
                 ))}
@@ -170,6 +243,12 @@ export default function PayForClient() {
           </div>
         )}
       </Modal>
+
+      {copyToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[110] bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-xl flex items-center gap-2 animate-fade-in">
+          <CheckCheck className="h-3.5 w-3.5" /> Account number copied
+        </div>
+      )}
     </DashboardLayout>
   )
-}
+    }
