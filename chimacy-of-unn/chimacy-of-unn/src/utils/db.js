@@ -382,53 +382,47 @@ export async function updateRequestStatus(id, status) {
   return mapRequestFromDb(data)
 }
 
-  if (data?.partner_id && ['ACCEPTED', 'REJECTED'].includes(status)) {
-    const clientName = data.full_name || 'your client'
-
-    const notification = {
-      type: 'status_update',
-      title: status === 'ACCEPTED'
-        ? 'Assistance Request Approved'
-        : 'Assistance Request Rejected',
-      body: status === 'ACCEPTED'
-        ? `Your assistance request for ${clientName} has been approved. The client has been added to your client records.`
-        : `Your assistance request for ${clientName} has been rejected.`,
-      request_id: data.id,
-      read: false,
-      recipient_id: data.partner_id,
-      action_route: '/partner/my-requests',
-    }
-
-    const { error: notificationError } = await supabase
-      .from('notifications')
-      .insert(notification)
-
-    if (notificationError) {
-      console.error('Failed to create request notification:', notificationError)
-    }
-  }
-
-  return mapRequestFromDb(data)
-}
-
 export async function getRequestStatusHistory(requestId) {
-  const { data, error } = await supabase.from('request_status_history').select('*').eq('request_id', requestId).order('changed_at', { ascending: true })
+  const { data, error } = await supabase
+    .from('request_status_history')
+    .select('*')
+    .eq('request_id', requestId)
+    .order('changed_at', { ascending: true })
+
   if (error) throw error
   return data || []
 }
 
 export async function getRequestNotes(requestId) {
-  const { data, error } = await supabase.from('request_notes').select('*').eq('request_id', requestId).order('created_at', { ascending: false })
+  const { data, error } = await supabase
+    .from('request_notes')
+    .select('*')
+    .eq('request_id', requestId)
+    .order('created_at', { ascending: false })
+
   if (error) throw error
   return data || []
 }
 
 export async function addRequestNote(requestId, note) {
   const { data: userData } = await supabase.auth.getUser()
-  const { data: profile } = await supabase.from('admin_profiles').select('display_name').eq('id', userData?.user?.id).maybeSingle()
-  const { data, error } = await supabase.from('request_notes').insert({
-    request_id: requestId, admin_id: userData?.user?.id || null, admin_name: profile?.display_name || userData?.user?.email || 'Admin', note,
-  }).select().single()
+  const { data: profile } = await supabase
+    .from('admin_profiles')
+    .select('display_name')
+    .eq('id', userData?.user?.id)
+    .maybeSingle()
+
+  const { data, error } = await supabase
+    .from('request_notes')
+    .insert({
+      request_id: requestId,
+      admin_id: userData?.user?.id || null,
+      admin_name: profile?.display_name || userData?.user?.email || 'Admin',
+      note,
+    })
+    .select()
+    .single()
+
   if (error) throw error
   return data
 }
