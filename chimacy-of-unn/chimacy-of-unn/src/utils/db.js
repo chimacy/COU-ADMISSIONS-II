@@ -379,6 +379,9 @@ export async function updateRequestStatus(id, status) {
 
   if (error) throw error
 
+  return mapRequestFromDb(data)
+}
+
   if (data?.partner_id && ['ACCEPTED', 'REJECTED'].includes(status)) {
     const clientName = data.full_name || 'your client'
 
@@ -465,31 +468,12 @@ export async function acceptRequestAndConvert(request) {
 
   if (error) throw error
 
-  if (data?.partner_id) {
-    const clientName = data.full_name || 'your client'
-
-    const { error: notificationError } = await supabase
-      .from('notifications')
-      .insert({
-        type: 'status_update',
-        title: 'Assistance Request Approved',
-        body: `Your assistance request for ${clientName} has been approved. The client has been added to your client records.`,
-        request_id: data.id,
-        read: false,
-        recipient_id: data.partner_id,
-        action_route: '/partner/my-requests',
-      })
-
-    if (notificationError) {
-      console.error('Failed to create approval notification:', notificationError)
-    }
-  }
-
   return {
     request: mapRequestFromDb(data),
     quotation,
   }
 }
+
 export async function deleteRejectedRequests() {
   const { data, error } = await supabase.from('requests').delete().eq('status', 'REJECTED').select()
   if (error) throw error
