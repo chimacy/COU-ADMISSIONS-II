@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import ConfigNeeded from './pages/ConfigNeeded.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import NotificationToastContainer from './components/Layout/NotificationToast.jsx'
 import { NotificationProvider } from './context/NotificationContext.jsx'
 import { useAuth } from './context/AuthContext.jsx'
 import { isSupabaseConfigured } from './lib/supabaseClient.js'
@@ -91,7 +92,6 @@ function PartnerHomeGuard() {
 }
 
 export default function App() {
-  // Show the configuration page ONLY when Supabase is NOT configured.
   if (!isSupabaseConfigured) {
     return <ConfigNeeded />
   }
@@ -99,6 +99,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <NotificationProvider>
+        <NotificationToastContainer />
         <Suspense fallback={<PageFallback />}>
           <Routes>
             <Route path="/" element={<Landing />} />
@@ -280,7 +281,7 @@ export default function App() {
               path="/partner/my-clients"
               element={
                 <ProtectedRoute>
-                  <MyClients title="My Clients" />
+                  <MyClients title="My Clients" mode="clients" />
                 </ProtectedRoute>
               }
             />
@@ -289,7 +290,7 @@ export default function App() {
               path="/partner/my-requests"
               element={
                 <ProtectedRoute>
-                  <MyClients title="My Requests" />
+                  <MyClients title="My Requests" mode="requests" />
                 </ProtectedRoute>
               }
             />
