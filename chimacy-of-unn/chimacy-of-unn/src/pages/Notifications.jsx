@@ -12,6 +12,7 @@ const TYPE_LABELS = {
   new_request: 'New Request',
   payment_confirmed: 'Payment Confirmed',
   status_update: 'Status Update',
+  assistance_request: 'Assistance Request',
 }
 
 export default function Notifications() {
