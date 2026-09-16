@@ -306,6 +306,57 @@ export async function getMyRequests() {
 
 /* ============================== ASSISTANCE REQUESTS (Super Admin: sees all; Partner: sees own via RLS) ============================== */
 
+export async function createAssistanceRequest(request) {
+  const { data: userData } = await supabase.auth.getUser()
+  const userId = userData?.user?.id
+
+  if (!userId) {
+    throw new Error('You must be logged in to submit an assistance request.')
+  }
+
+  const payload = {
+    full_name: request.clientName,
+    phone: request.phone || '',
+    email: request.email || '',
+    jamb_reg_number: request.jambRegNumber || '',
+    jamb_score: Number(request.jambScore) || 0,
+
+    institution: request.institution || '',
+    programme_id: request.programmeId || null,
+    programme_name: request.programmeName || '',
+    programme_grade: request.programmeGrade || '',
+    working_type: request.workingType || '',
+
+    price: Number(request.price) || 0,
+    eligibility_status: request.eligibilityStatus || '',
+    benchmark_status: request.benchmarkStatus || '',
+    recommendation: request.recommendation || '',
+    additional_notes: request.additionalNotes || '',
+
+    jamb_subjects: request.jambSubjects || [],
+    olevel_subjects: request.olevelSubjects || [],
+    olevel_sittings: Number(request.olevelSittings) || 1,
+    aggregate: Number(request.aggregate) || 0,
+
+    terms_accepted: true,
+    terms_accepted_at: new Date().toISOString(),
+
+    partner_id: userId,
+    source_type: 'PARTNER',
+    status: 'PENDING',
+  }
+
+  const { data, error } = await supabase
+    .from('requests')
+    .insert(payload)
+    .select()
+    .single()
+
+  if (error) throw error
+
+  return mapRequestFromDb(data)
+}
+
 export async function getRequests() {
   const { data, error } = await supabase.from('requests').select('*').order('created_at', { ascending: false })
   if (error) throw error
