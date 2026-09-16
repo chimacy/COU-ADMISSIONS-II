@@ -378,8 +378,6 @@ export default function Checkout() {
             </div>
 
             <Select label="Payment Method (the only field you can set)" value={confirmMethod} onChange={(e) => setConfirmMethod(e.target.value)}>
-              <option>Bank Transfer</option>
-              <option>Cash</option>
               <option>Moniepoint</option>
               <option>Opay</option>
             </Select>
@@ -399,8 +397,35 @@ export default function Checkout() {
               )}
             </div>
 
-            {confirming.quotation && (
+                          {confirming.quotation && (
               <div className="glass-panel p-3 flex items-center justify-between text-xs">
-                <span className="text-slate-500">Total Due</span>
+                <span className="text-slate-500">Total Paid After This Payment</span>
                 <span className="font-semibold text-slate-800">
-                  {formatCurrency(confirming.quotation.paidAmount, settings.currency_symbol)} + this payment of {formatCurrency(confirming.payment.amount, settings.currency_symbol)} / {forma
+                  {formatCurrency(
+                    Number(confirming.quotation.paidAmount || 0) +
+                    Number(confirming.payment.amount || 0),
+                    settings.currency_symbol
+                  )}{' '}
+                  / {formatCurrency(confirming.quotation.price, settings.currency_symbol)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+    </DashboardLayout>
+  )
+}
+
+function ReadField({ label, value, emphasis = false }) {
+  return (
+    <div className="glass-panel p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        {label}
+      </p>
+      <p className={`text-sm mt-1 ${emphasis ? 'font-bold text-slate-800' : 'font-medium text-slate-700'}`}>
+        {value}
+      </p>
+    </div>
+  )
+}
