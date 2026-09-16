@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
-  CreditCard, Search, CheckCircle2, FileDown, FilePlus2, Receipt, Loader2, Plus, Clock,
+  CreditCard, Search, CheckCircle2, FileDown, FilePlus2, Receipt, Loader2, Plus, Clock, Image as ImageIcon, FileText,
 } from 'lucide-react'
 import DashboardLayout from '../components/Layout/DashboardLayout.jsx'
 import Card from '../components/UI/Card.jsx'
@@ -8,24 +9,33 @@ import Modal from '../components/UI/Modal.jsx'
 import { Input, Select } from '../components/UI/FormField.jsx'
 import {
   getQuotations, recordPayment, generateInvoiceNumber, getPaymentsForQuotation,
-  getPendingPartnerPayments, confirmPendingPayment,
+  getPendingPartnerPayments, confirmPendingPayment, getPaymentById, getQuotationById,
 } from '../utils/db.js'
-import { formatCurrency, formatDate } from '../utils/format.js'
+import { supabase } from '../lib/supabaseClient.js'
+import { formatCurrency, formatDate, formatDateTime } from '../utils/format.js'
 import { statusBadgeStyle, STATUS } from '../utils/evaluation.js'
 import { useSettings } from '../context/SettingsContext.jsx'
 
 export default function Checkout() {
   const { settings } = useSettings()
+  const [params, setParams] = useSearchParams()
   const [quotations, setQuotations] = useState([])
   const [pendingPayments, setPendingPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('eligible-unpaid')
   const [recording, setRecording] = useState(null)
-  const [form, setForm] = useState({ amount: '', method: 'Bank Transfer', date: new Date().toISOString().slice(0, 10), note: '' })
+  const [form, setForm] = useState({
+    amount: '', method: 'Bank Transfer', date: new Date().toISOString().slice(0, 10), note: '', paymentType: 'FULL',
+  })
   const [saving, setSaving] = useState(false)
   const [history, setHistory] = useState(null)
   const [busyId, setBusyId] = useState(null)
+
+  const [confirming, setConfirming] = useState(null)
+  const [confirmMethod, setConfirmMethod] = useState('Bank Transfer')
+  const [receiptSignedUrl, setReceiptSignedUrl] = useState(null)
+  const [confirmBusy, setConfirmBusy] = useState(false)
 
   const refresh = () => {
     setLoading(true)
@@ -35,6 +45,12 @@ export default function Checkout() {
   }
 
   useEffect(() => { refresh() }, [])
+
+  useEffect(() => {
+    const confirmId = params.get('confirm')
+    if (confirmId) openConfirm(confirmId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params])
 
   const filtered = useMemo(() => {
     let list = quotations
@@ -51,7 +67,9 @@ export default function Checkout() {
   function openRecordPayment(record) {
     const remaining = Math.max(0, record.price - record.paidAmount)
     setRecording(record)
-    setForm({ amount: remaining, method: 'Bank Transfer', date: new Date().toISOString().slice(0, 10), note: '' })
+    setForm({
+      amount: remaining, method: 'Bank Transfer', date: new Date().toISOString().slice(0, 10), note: '', paymentType: 'FULL',
+    })
   }
 
   async function handleRecordPayment() {
@@ -59,7 +77,7 @@ export default function Checkout() {
     setSaving(true)
     try {
       await recordPayment(recording.id, {
-        amount: Number(form.amount) || 0, method: form.method, date: form.date, note: form.note,
+        amount: Number(form.amount) || 0, method: form.method, date: form.date, note: form.note, paymentType: form.paymentType,
       })
       setRecording(null)
       refresh()
@@ -97,17 +115,44 @@ export default function Checkout() {
     setHistory({ record, payments })
   }
 
-  async function handleConfirmPending(payment) {
-    setBusyId(payment.id)
+  async function openConfirm(paymentId) {
+    const payment = await getPaymentById(paymentId)
+    if (!payment) return
+    const quotation = payment.quotation_id ? await getQuotationById(payment.quotation_id) : null
+    setConfirming({ payment, quotation })
+    setConfirmMethod(payment.payment_method || 'Bank Transfer')
+    setReceiptSignedUrl(null)
+
+    if (payment.receipt_url) {
+      const { data } = await supabase.storage.from('payment-receipts').createSignedUrl(payment.receipt_url, 3600)
+      if (data?.signedUrl) setReceiptSignedUrl(data.signedUrl)
+    }
+  }
+
+  function closeConfirm() {
+    setConfirming(null)
+    setReceiptSignedUrl(null)
+    if (params.get('confirm')) {
+      params.delete('confirm')
+      setParams(params, { replace: true })
+    }
+  }
+
+  async function handleConfirmPending() {
+    if (!confirming) return
+    setConfirmBusy(true)
     try {
-      await confirmPendingPayment(payment.id)
+      await confirmPendingPayment(confirming.payment.id, confirmMethod)
+      closeConfirm()
       refresh()
     } catch (err) {
       alert(err.message || 'Failed to confirm payment.')
     } finally {
-      setBusyId(null)
+      setConfirmBusy(false)
     }
   }
+
+  const isReceiptImage = confirming?.payment?.receipt_url && /\.(png|jpe?g)$/i.test(confirming.payment.receipt_url)
 
   return (
     <DashboardLayout title="Checkout & Invoices">
@@ -120,15 +165,17 @@ export default function Checkout() {
             </div>
             <div className="space-y-2">
               {pendingPayments.map((p) => (
-                <div key={p.id} className="bg-white rounded-xl p-3 flex items-center justify-between gap-3">
+                <button
+                  key={p.id}
+                  onClick={() => openConfirm(p.id)}
+                  className="w-full text-left bg-white rounded-xl p-3 flex items-center justify-between gap-3 hover:bg-amber-50/40 transition-colors"
+                >
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-slate-800">{p.client_name || 'Client'} — {formatCurrency(p.amount, settings.currency_symbol)}</p>
                     <p className="text-xs text-slate-500">Declared by {p.admin_profiles?.display_name || 'a partner'} &middot; {formatDate(p.payment_date || p.created_at)}</p>
                   </div>
-                  <button onClick={() => handleConfirmPending(p)} disabled={busyId === p.id} className="btn-primary !px-3 !py-1.5 !text-xs shrink-0">
-                    {busyId === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Confirm
-                  </button>
-                </div>
+                  <span className="badge bg-amber-100 text-amber-700 shrink-0">Review</span>
+                </button>
               ))}
             </div>
           </Card>
@@ -246,6 +293,10 @@ export default function Checkout() {
                 {recording.paidAmount > 0 && ` · Already paid ${formatCurrency(recording.paidAmount, settings.currency_symbol)}`}
               </p>
             </div>
+            <Select label="Payment Type" value={form.paymentType} onChange={(e) => setForm({ ...form, paymentType: e.target.value })}>
+              <option value="FULL">Full Payment</option>
+              <option value="INSTALLMENT">Installment Payment</option>
+            </Select>
             <Input label="Amount Received (₦)" type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
             <Select label="Payment Method" value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}>
               <option>Bank Transfer</option>
@@ -257,7 +308,7 @@ export default function Checkout() {
             <Input label="Payment Date" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
             <Input label="Receipt Note / Reference (optional)" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
             <p className="text-[11px] text-slate-400">
-              If this amount is less than the full price, it's recorded as an installment - the client stays "Unpaid" until the total received reaches the full price.
+              If this is an installment amount less than the full price, the client stays "Unpaid" until the total received reaches the full price.
             </p>
           </div>
         )}
@@ -283,13 +334,73 @@ export default function Checkout() {
                     <span className="font-semibold text-slate-800">{formatCurrency(p.amount, settings.currency_symbol)}</span>
                     <span className={`badge !text-[10px] ${p.status === 'SUCCESSFUL' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{p.status}</span>
                   </div>
-                  <p className="text-xs text-slate-500 mt-1">{formatDate(p.payment_date || p.created_at)} {p.receipt_note ? `· ${p.receipt_note}` : ''}</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {p.payment_type === 'INSTALLMENT' ? 'Installment' : 'Full Payment'} &middot; {formatDate(p.payment_date || p.created_at)} &middot; {p.payment_method || '-'}
+                    {p.receipt_note ? ` · ${p.receipt_note}` : ''}
+                  </p>
                 </div>
               ))
             )}
           </div>
         )}
       </Modal>
-    </DashboardLayout>
-  )
-    }
+
+      <Modal
+        open={!!confirming}
+        onClose={closeConfirm}
+        title="Confirm Payment"
+        size="lg"
+        footer={
+          <>
+            <button className="btn-secondary" onClick={closeConfirm}>Cancel</button>
+            <button className="btn-primary" onClick={handleConfirmPending} disabled={confirmBusy}>
+              {confirmBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Confirm Payment
+            </button>
+          </>
+        }
+      >
+        {confirming && (
+          <div className="space-y-4">
+            <div>
+              <p className="text-lg font-bold text-slate-800">{confirming.payment.client_name || confirming.quotation?.clientName || 'Client'}</p>
+              {confirming.payment.admin_profiles?.display_name && (
+                <p className="text-xs text-slate-500">Registered by: <strong>{confirming.payment.admin_profiles.display_name}</strong></p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <ReadField label="Programme" value={confirming.quotation?.programme || '-'} />
+              <ReadField label="Grade / Department" value={confirming.quotation?.programmeGrade || '-'} />
+              <ReadField label="Payment Amount" value={formatCurrency(confirming.payment.amount, settings.currency_symbol)} emphasis />
+              <ReadField label="Payment Type" value={confirming.payment.payment_type === 'INSTALLMENT' ? 'Installment' : 'Full Payment'} />
+              <ReadField label="Payment Date" value={formatDate(confirming.payment.payment_date || confirming.payment.created_at)} />
+              <ReadField label="Declared" value={formatDateTime(confirming.payment.created_at)} />
+            </div>
+
+            <Select label="Payment Method (the only field you can set)" value={confirmMethod} onChange={(e) => setConfirmMethod(e.target.value)}>
+              <option>Bank Transfer</option>
+              <option>Cash</option>
+              <option>Moniepoint</option>
+              <option>Opay</option>
+            </Select>
+
+            <div>
+              <p className="text-xs font-semibold uppercase text-slate-400 mb-2">Receipt</p>
+              {!confirming.payment.receipt_url ? (
+                <p className="text-sm text-slate-400">No receipt was attached to this payment.</p>
+              ) : !receiptSignedUrl ? (
+                <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="h-4 w-4 animate-spin" /> Loading receipt...</div>
+              ) : isReceiptImage ? (
+                <img src={receiptSignedUrl} alt="Payment receipt" className="max-h-64 rounded-xl border border-slate-200 object-contain" />
+              ) : (
+                <a href={receiptSignedUrl} target="_blank" rel="noreferrer" className="btn-secondary inline-flex">
+                  <FileText className="h-4 w-4" /> Open Receipt
+                </a>
+              )}
+            </div>
+
+            {confirming.quotation && (
+              <div className="glass-panel p-3 flex items-center justify-between text-xs">
+                <span className="text-slate-500">Total Due</span>
+                <span className="font-semibold text-slate-800">
+                  {formatCurrency(confirming.quotation.paidAmount, settings.currency_symbol)} + this payment of {formatCurrency(confirming.payment.amount, settings.currency_symbol)} / {forma
