@@ -11,9 +11,11 @@ const PUSH_PREF_KEY = 'chimacy_push_enabled'
 export function NotificationProvider({ children }) {
   const { isAuthenticated } = useAuth()
   const [notifications, setNotifications] = useState([])
+  const [toasts, setToasts] = useState([])
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem(SOUND_PREF_KEY) === 'true')
   const [pushEnabled, setPushEnabled] = useState(() => localStorage.getItem(PUSH_PREF_KEY) === 'true' && typeof Notification !== 'undefined' && Notification.permission === 'granted')
   const audioCtxRef = useRef(null)
+  const soundedIdsRef = useRef(new Set())
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
@@ -21,6 +23,15 @@ export function NotificationProvider({ children }) {
     const { data } = await supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(30)
     if (data) setNotifications(data)
   }, [])
+
+  const dismissToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id))
+  }, [])
+
+  const pushToast = useCallback((notification) => {
+    setToasts((prev) => [...prev, notification])
+    setTimeout(() => dismissToast(notification.id), 6000)
+  }, [dismissToast])
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -32,18 +43,27 @@ export function NotificationProvider({ children }) {
       .channel('admin-notifications')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
         setNotifications((prev) => [payload.new, ...prev].slice(0, 30))
-        playSound()
+        playSoundOnce(payload.new.id)
+        pushToast(payload.new)
         showPushNotification(payload.new)
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, fetchNotifications])
+  }, [isAuthenticated, fetchNotifications, pushToast])
+
+  function playSoundOnce(notificationId) {
+    if (soundedIdsRef.current.has(notificationId)) return
+    soundedIdsRef.current.add(notificationId)
+    if (soundedIdsRef.current.size > 200) soundedIdsRef.current.clear()
+    playSound()
+  }
 
   function playSound() {
-    if (!soundEnabled || !audioCtxRef.current) return
+    if (!audioCtxRef.current) return
     try {
       const ctx = audioCtxRef.current
+      if (ctx.state === 'suspended') ctx.resume()
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
       osc.type = 'sine'
@@ -55,8 +75,27 @@ export function NotificationProvider({ children }) {
       gain.connect(ctx.destination)
       osc.start()
       osc.stop(ctx.currentTime + 0.35)
-    } catch (e) { /* sound is a nice-to-have */ }
+    } catch (e) { /* sound is best-effort, never blocks the notification itself */ }
   }
+
+  useEffect(() => {
+    function unlockAudio() {
+      if (!audioCtxRef.current) {
+        const Ctx = window.AudioContext || window.webkitAudioContext
+        audioCtxRef.current = new Ctx()
+        localStorage.setItem(SOUND_PREF_KEY, 'true')
+        setSoundEnabled(true)
+      }
+      window.removeEventListener('pointerdown', unlockAudio)
+      window.removeEventListener('keydown', unlockAudio)
+    }
+    window.addEventListener('pointerdown', unlockAudio)
+    window.addEventListener('keydown', unlockAudio)
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio)
+      window.removeEventListener('keydown', unlockAudio)
+    }
+  }, [])
 
   function showPushNotification(notification) {
     if (!pushEnabled || typeof Notification === 'undefined' || Notification.permission !== 'granted') return
@@ -105,7 +144,17 @@ export function NotificationProvider({ children }) {
 
   return (
     <NotificationContext.Provider value={{
-      notifications, unreadCount, soundEnabled, enableSound, pushEnabled, enablePush, markAsRead, markAllAsRead, refetch: fetchNotifications,
+      notifications,
+      unreadCount,
+      toasts,
+      dismissToast,
+      soundEnabled,
+      enableSound,
+      pushEnabled,
+      enablePush,
+      markAsRead,
+      markAllAsRead,
+      refetch: fetchNotifications,
     }}
     >
       {children}
