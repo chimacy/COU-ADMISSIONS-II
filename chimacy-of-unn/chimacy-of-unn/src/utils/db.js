@@ -47,6 +47,7 @@ function mapProgrammeFromDb(row) {
     doubleBenchmark: row.double_benchmark,
     priceEstimated: row.price_estimated,
     benchmarkDefault: row.benchmark_default,
+    sourceCost: Number(row.source_cost) || 0,
   }
 }
 
@@ -63,6 +64,7 @@ function mapProgrammeToDb(p) {
     double_benchmark: p.doubleBenchmark || '',
     price_estimated: !!p.priceEstimated,
     benchmark_default: !!p.benchmarkDefault,
+    source_cost: Number(p.sourceCost) || 0,
   }
 }
 
@@ -148,7 +150,9 @@ export async function deleteQuotation(id) {
   if (error) throw error
 }
 
-export async function recordPayment(quotationId, { amount, method, date, note }) {
+export async function recordPayment(quotationId, {
+  amount, method, date, note, paymentType = 'FULL',
+}) {
   const { data: userData } = await supabase.auth.getUser()
   const txRef = `manual-${quotationId}-${Date.now()}`
   const { data, error } = await supabase.from('payments').insert({
@@ -161,16 +165,24 @@ export async function recordPayment(quotationId, { amount, method, date, note })
     verified_at: new Date().toISOString(),
     payment_date: date,
     receipt_note: note || '',
+    payment_type: paymentType,
+    payment_method: method,
     recorded_by: userData?.user?.id || null,
   }).select().single()
   if (error) throw error
-  return { ...data, method }
+  return data
 }
 
 export async function getPaymentsForQuotation(quotationId) {
   const { data, error } = await supabase.from('payments').select('*').eq('quotation_id', quotationId).order('created_at', { ascending: false })
   if (error) throw error
   return data || []
+}
+
+export async function getPaymentById(id) {
+  const { data, error } = await supabase.from('payments').select('*, admin_profiles!payments_partner_id_fkey(display_name)').eq('id', id).maybeSingle()
+  if (error) throw error
+  return data
 }
 
 export async function getPendingPartnerPayments() {
@@ -183,8 +195,10 @@ export async function getPendingPartnerPayments() {
   return data || []
 }
 
-export async function confirmPendingPayment(paymentId) {
-  const { data, error } = await supabase.from('payments').update({ status: 'SUCCESSFUL', verified: true, verified_at: new Date().toISOString() }).eq('id', paymentId).select().single()
+export async function confirmPendingPayment(paymentId, method) {
+  const { data, error } = await supabase.from('payments').update({
+    status: 'SUCCESSFUL', verified: true, verified_at: new Date().toISOString(), payment_method: method,
+  }).eq('id', paymentId).select().single()
   if (error) throw error
   return data
 }
@@ -253,6 +267,9 @@ function mapQuotationToDb(q) {
     remarks: q.remarks || '',
     quote_date: q.date || new Date().toISOString().slice(0, 10),
     rules_snapshot: q.rulesSnapshot || [],
+    source_cost: Number(q.sourceCost) || 0,
+    partner_id: q.partnerId || null,
+    source_type: q.sourceType || 'DIRECT',
   }
 }
 
@@ -281,7 +298,13 @@ export async function getMyClients() {
   }))
 }
 
-/* ============================== ASSISTANCE REQUESTS (Super Admin only) ============================== */
+export async function getMyRequests() {
+  const { data, error } = await supabase.from('requests').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return (data || []).map(mapRequestFromDb)
+}
+
+/* ============================== ASSISTANCE REQUESTS (Super Admin: sees all; Partner: sees own via RLS) ============================== */
 
 export async function getRequests() {
   const { data, error } = await supabase.from('requests').select('*').order('created_at', { ascending: false })
@@ -342,6 +365,8 @@ export async function acceptRequestAndConvert(request) {
     remarks: request.additionalNotes,
     date: new Date().toISOString().slice(0, 10),
     rulesSnapshot: await getRules(),
+    partnerId: request.partnerId || null,
+    sourceType: request.sourceType || 'DIRECT',
   })
   const { data, error } = await supabase.from('requests').update({ status: 'ACCEPTED', linked_quotation_id: quotation.id }).eq('id', request.id).select().single()
   if (error) throw error
@@ -387,6 +412,8 @@ function mapRequestFromDb(row) {
     jambContribution: row.jamb_contribution,
     olevelContribution: row.olevel_contribution,
     aggregate: row.aggregate,
+    partnerId: row.partner_id,
+    sourceType: row.source_type,
   }
 }
 
@@ -498,4 +525,4 @@ export async function exportAllData() {
   return {
     programmes, rules, quotations, requests, exportedAt: new Date().toISOString(),
   }
-    }
+}
