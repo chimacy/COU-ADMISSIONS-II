@@ -299,11 +299,9 @@ export default function NewClient() {
 
           <div className="flex flex-wrap gap-3 pt-2">
             <button onClick={() => handleSave(false)} disabled={saving} className="btn-primary">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save Client Record
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Register Client
             </button>
             <button onClick={() => handleSave(true)} disabled={saving} className="btn-secondary">
-              <FileDown className="h-4 w-4" /> Save & Download PDF
-            </button>
             <button onClick={handleReset} className="btn-ghost">
               <RefreshCcw className="h-4 w-4" /> Reset
             </button>
