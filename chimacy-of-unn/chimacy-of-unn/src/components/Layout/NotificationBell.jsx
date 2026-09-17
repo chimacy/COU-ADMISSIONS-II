@@ -8,6 +8,7 @@ import {
   SmartphoneNfc,
 } from 'lucide-react'
 import { useNotifications } from '../../context/NotificationContext.jsx'
+import { useAuth } from '../../context/AuthContext.jsx'
 
 function timeAgo(iso) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000
@@ -30,15 +31,12 @@ function NotificationBell() {
     markAsRead,
     markAllAsRead,
   } = useNotifications()
+  const { isSuperAdmin } = useAuth()
 
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   const navigate = useNavigate()
 
-  /*
-   * Automatically attempt to enable notifications when the component loads.
-   * Browser permissions may still require user interaction.
-   */
   useEffect(() => {
     if (!soundEnabled) {
       try {
@@ -57,10 +55,6 @@ function NotificationBell() {
     }
   }, [])
 
-  /*
-   * Enable sound and push after the first user interaction.
-   * This helps browsers that block automatic audio playback.
-   */
   useEffect(() => {
     const activateNotifications = () => {
       if (!soundEnabled) {
@@ -89,9 +83,6 @@ function NotificationBell() {
     }
   }, [soundEnabled, pushEnabled, enableSound, enablePush])
 
-  /*
-   * Close notification panel when clicking outside.
-   */
   useEffect(() => {
     function handleClick(e) {
       if (ref.current && !ref.current.contains(e.target)) {
@@ -112,6 +103,16 @@ function NotificationBell() {
     markAsRead(n.id)
     setOpen(false)
 
+    if (n.action_route) {
+      navigate(n.action_route)
+      return
+    }
+
+    if (n.related_payment_id) {
+      navigate(`${isSuperAdmin ? '/admin' : '/partner'}/payments?confirm=${n.related_payment_id}`)
+      return
+    }
+
     if (n.request_id) {
       navigate(`/admin/requests?open=${n.request_id}`)
     }
@@ -119,7 +120,6 @@ function NotificationBell() {
 
   return (
     <div className="relative" ref={ref}>
-      {/* Notification Bell */}
       <button
         onClick={() => setOpen((o) => !o)}
         className="btn-ghost !p-2.5 rounded-full relative"
@@ -141,7 +141,6 @@ function NotificationBell() {
       {open && (
         <div className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white border border-primary-100 shadow-xl rounded-2xl z-50 overflow-hidden">
 
-          {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-primary-100">
             <div>
               <p className="font-bold text-sm text-slate-800">
@@ -164,7 +163,6 @@ function NotificationBell() {
             )}
           </div>
 
-          {/* Notification Controls */}
           {(!soundEnabled || !pushEnabled) && (
             <div className="px-4 py-3 border-b border-primary-100 bg-primary-50/60">
               <p className="text-[11px] text-slate-500 mb-2">
@@ -195,7 +193,6 @@ function NotificationBell() {
             </div>
           )}
 
-          {/* Notifications */}
           <div className="max-h-80 overflow-y-auto">
             {notifications.length === 0 ? (
               <p className="text-sm text-slate-400 text-center py-8">
