@@ -9,20 +9,41 @@ import { StatCard } from '../../components/UI/Badge.jsx'
 import { getMyClients, getMyCommissions } from '../../utils/db.js'
 import { formatCurrency } from '../../utils/format.js'
 import { useSettings } from '../../context/SettingsContext.jsx'
+import { useAuth } from '../../context/AuthContext.jsx'
+import { supabase } from '../../lib/supabaseClient.js'
 import { STATUS } from '../../utils/evaluation.js'
 
 export default function PartnerHome() {
   const navigate = useNavigate()
   const { settings } = useSettings()
+  const { user } = useAuth()
   const [clients, setClients] = useState([])
   const [commissions, setCommissions] = useState([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const refresh = () => {
     Promise.all([getMyClients(), getMyCommissions()])
       .then(([c, com]) => { setClients(c); setCommissions(com) })
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { refresh() }, [])
+
+  useEffect(() => {
+    if (!user?.id) return undefined
+    const channel = supabase
+      .channel('partner-home-live')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${user.id}`,
+        },
+        () => { refresh() },
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
 
   const stats = useMemo(() => {
     const activeRequests = clients.filter((c) => !c.paid).length
@@ -106,4 +127,4 @@ export default function PartnerHome() {
       </div>
     </DashboardLayout>
   )
-}
+      }
