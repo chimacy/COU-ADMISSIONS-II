@@ -10,12 +10,10 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Load the user's profile only.
-  // IMPORTANT: This function NEVER updates last_login.
   const loadProfile = useCallback(async (userId, userEmail) => {
     if (!userId) {
       setProfile(null)
-      return
+      return null
     }
 
     let { data } = await supabase
@@ -38,11 +36,10 @@ export function AuthProvider({ children }) {
     }
 
     setProfile(data)
+    return data
   }, [])
 
   useEffect(() => {
-    // Restore an existing session on page load or refresh.
-    // This MUST NOT update last_login.
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
 
@@ -61,13 +58,6 @@ export function AuthProvider({ children }) {
         setSession(newSession)
 
         if (newSession?.user) {
-          // IMPORTANT:
-          // Auth state events such as INITIAL_SESSION,
-          // TOKEN_REFRESHED, and session restoration only load
-          // the profile. They NEVER update last_login.
-          //
-          // This prevents a Partner opening or refreshing the
-          // Partner page from generating a login notification.
           loadProfile(
             newSession.user.id,
             newSession.user.email,
@@ -82,25 +72,17 @@ export function AuthProvider({ children }) {
   }, [loadProfile])
 
   const login = useCallback(async (email, password) => {
-    // Authenticate first.
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
-    // Failed login:
-    // Do NOT update last_login and do NOT trigger a login notification.
     if (error) throw error
 
-    // Authentication succeeded.
     setSession(data.session)
 
-    // IMPORTANT:
-    // This is the ONLY place in AuthContext where last_login
-    // is updated.
-    //
-    // Therefore, the "Partner logged in" database notification
-    // can only be triggered by an actual successful Sign In.
+    let resolvedProfile = null
+
     if (data.user) {
       const { data: updatedProfile } = await supabase
         .from('admin_profiles')
@@ -113,17 +95,16 @@ export function AuthProvider({ children }) {
 
       if (updatedProfile) {
         setProfile(updatedProfile)
+        resolvedProfile = updatedProfile
       } else {
-        // If the profile somehow does not exist yet,
-        // loadProfile will create/load it as before.
-        await loadProfile(
+        resolvedProfile = await loadProfile(
           data.user.id,
           data.user.email,
         )
       }
     }
 
-    return data
+    return { ...data, profile: resolvedProfile }
   }, [loadProfile])
 
   const logout = useCallback(async () => {
@@ -180,4 +161,4 @@ export function useAuth() {
   }
 
   return ctx
-}
+          }
