@@ -4,8 +4,6 @@ import {
   Bell,
   BellRing,
   Check,
-  Volume2,
-  SmartphoneNfc,
 } from 'lucide-react'
 import { useNotifications } from '../../context/NotificationContext.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -24,10 +22,6 @@ function NotificationBell() {
   const {
     notifications,
     unreadCount,
-    soundEnabled,
-    enableSound,
-    pushEnabled,
-    enablePush,
     markAsRead,
     markAllAsRead,
   } = useNotifications()
@@ -36,52 +30,6 @@ function NotificationBell() {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!soundEnabled) {
-      try {
-        enableSound()
-      } catch (error) {
-        console.warn('Automatic sound activation was blocked:', error)
-      }
-    }
-
-    if (!pushEnabled) {
-      try {
-        enablePush()
-      } catch (error) {
-        console.warn('Automatic push activation was blocked:', error)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    const activateNotifications = () => {
-      if (!soundEnabled) {
-        try {
-          enableSound()
-        } catch (error) {
-          console.warn('Sound activation failed:', error)
-        }
-      }
-
-      if (!pushEnabled) {
-        try {
-          enablePush()
-        } catch (error) {
-          console.warn('Push notification activation failed:', error)
-        }
-      }
-    }
-
-    window.addEventListener('click', activateNotifications, { once: true })
-    window.addEventListener('touchstart', activateNotifications, { once: true })
-
-    return () => {
-      window.removeEventListener('click', activateNotifications)
-      window.removeEventListener('touchstart', activateNotifications)
-    }
-  }, [soundEnabled, pushEnabled, enableSound, enablePush])
 
   useEffect(() => {
     function handleClick(e) {
@@ -148,7 +96,7 @@ function NotificationBell() {
               </p>
 
               <p className="text-[10px] text-slate-400 mt-0.5">
-                Alerts are always enabled
+                Sound is always on for new alerts
               </p>
             </div>
 
@@ -162,36 +110,6 @@ function NotificationBell() {
               </button>
             )}
           </div>
-
-          {(!soundEnabled || !pushEnabled) && (
-            <div className="px-4 py-3 border-b border-primary-100 bg-primary-50/60">
-              <p className="text-[11px] text-slate-500 mb-2">
-                Your browser requires permission to activate some notification features.
-              </p>
-
-              <div className="flex gap-2">
-                {!soundEnabled && (
-                  <button
-                    onClick={enableSound}
-                    className="btn-secondary !text-[11px] !py-1.5 flex-1"
-                  >
-                    <Volume2 className="h-3.5 w-3.5" />
-                    Enable Sound
-                  </button>
-                )}
-
-                {!pushEnabled && (
-                  <button
-                    onClick={enablePush}
-                    className="btn-primary !text-[11px] !py-1.5 flex-1"
-                  >
-                    <SmartphoneNfc className="h-3.5 w-3.5" />
-                    Enable Phone Alerts
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
 
           <div className="max-h-80 overflow-y-auto">
             {notifications.length === 0 ? (
