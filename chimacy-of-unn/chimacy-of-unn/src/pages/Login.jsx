@@ -4,8 +4,16 @@ import { Lock, Mail, Loader2, GraduationCap, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useSettings } from '../context/SettingsContext.jsx'
 
+function resolveDestination(isSuperAdmin, requestedFrom) {
+  const roleHome = isSuperAdmin ? '/admin' : '/partner'
+  if (requestedFrom && (isSuperAdmin || !requestedFrom.startsWith('/admin'))) {
+    return requestedFrom
+  }
+  return roleHome
+}
+
 export default function Login() {
-  const { login, isAuthenticated } = useAuth()
+  const { login, isAuthenticated, isSuperAdmin } = useAuth()
   const { settings } = useSettings()
   const navigate = useNavigate()
   const location = useLocation()
@@ -17,7 +25,7 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false)
 
   if (isAuthenticated) {
-    const dest = location.state?.from?.pathname || '/admin'
+    const dest = resolveDestination(isSuperAdmin, location.state?.from?.pathname)
     return <Navigate to={dest} replace />
   }
 
@@ -26,8 +34,10 @@ export default function Login() {
     setError('')
     setSubmitting(true)
     try {
-      await login(email.trim(), password)
-      navigate(location.state?.from?.pathname || '/admin', { replace: true })
+      const result = await login(email.trim(), password)
+      const loggedInIsSuperAdmin = result.profile?.role === 'super_admin' && result.profile?.status === 'active'
+      const dest = resolveDestination(loggedInIsSuperAdmin, location.state?.from?.pathname)
+      navigate(dest, { replace: true })
     } catch (err) {
       setError(err.message === 'Invalid login credentials'
         ? 'Incorrect ID or password. Please try again.'
