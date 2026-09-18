@@ -10,6 +10,8 @@ import { StatCard } from '../components/UI/Badge.jsx'
 import { getQuotations, getProgrammes, getRequests, getAllCommissions } from '../utils/db.js'
 import { formatCurrency, formatDate } from '../utils/format.js'
 import { useSettings } from '../context/SettingsContext.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
+import { supabase } from '../lib/supabaseClient.js'
 import { STATUS, statusBadgeStyle } from '../utils/evaluation.js'
 
 const actions = [
@@ -25,13 +27,14 @@ const actions = [
 export default function Dashboard() {
   const navigate = useNavigate()
   const { settings } = useSettings()
+  const { isSuperAdmin } = useAuth()
   const [quotations, setQuotations] = useState([])
   const [commissions, setCommissions] = useState([])
   const [programmeCount, setProgrammeCount] = useState(0)
   const [pendingRequests, setPendingRequests] = useState(0)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const refresh = () => {
     Promise.all([getQuotations(), getProgrammes(), getRequests(), getAllCommissions()])
       .then(([q, p, r, c]) => {
         setQuotations(q)
@@ -40,7 +43,25 @@ export default function Dashboard() {
         setCommissions(c)
       })
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { refresh() }, [])
+
+  useEffect(() => {
+    if (!isSuperAdmin) return undefined
+    const channel = supabase
+      .channel('super-admin-dashboard-live')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT', schema: 'public', table: 'notifications', filter: 'recipient_id=is.null',
+        },
+        () => { refresh() },
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuperAdmin])
 
   const stats = useMemo(() => {
     const total = quotations.length
@@ -205,4 +226,4 @@ function EmptyState({ navigate }) {
       </button>
     </div>
   )
-   }
+}
