@@ -39,6 +39,13 @@ export function NotificationProvider({ children }) {
     setTimeout(() => dismissToast(notification.id), 6000)
   }, [dismissToast])
 
+  const showToast = useCallback((title, body = '', variant = 'success') => {
+    const id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    pushToast({
+      id, title, body, variant, local: true, created_at: new Date().toISOString(),
+    })
+  }, [pushToast])
+
   useEffect(() => {
     if (!isAuthenticated) {
       setNotifications([])
@@ -203,6 +210,7 @@ export function NotificationProvider({ children }) {
         unreadCount,
         toasts,
         dismissToast,
+        showToast,
         soundEnabled,
         enableSound,
         markAsRead,
