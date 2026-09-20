@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
-  CreditCard, Loader2, Search, CheckCircle2, Landmark, Copy, Upload, X, CheckCheck,
+  CreditCard, Loader2, Search, CheckCircle2, Landmark, Copy, Upload, X,
 } from 'lucide-react'
 import DashboardLayout from '../../components/Layout/DashboardLayout.jsx'
 import Card from '../../components/UI/Card.jsx'
@@ -11,11 +11,13 @@ import { formatCurrency } from '../../utils/format.js'
 import { STATUS, statusBadgeStyle } from '../../utils/evaluation.js'
 import { useSettings } from '../../context/SettingsContext.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
+import { useNotifications } from '../../context/NotificationContext.jsx'
 import { supabase } from '../../lib/supabaseClient.js'
 
 export default function PayForClient() {
   const { settings } = useSettings()
   const { user } = useAuth()
+  const { showToast } = useNotifications()
   const [clients, setClients] = useState([])
   const [accounts, setAccounts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -27,15 +29,15 @@ export default function PayForClient() {
   const [amount, setAmount] = useState('')
   const [receiptFile, setReceiptFile] = useState(null)
   const [uploadingReceipt, setUploadingReceipt] = useState(false)
-  const [copyToast, setCopyToast] = useState(false)
-  const copyTimerRef = useRef(null)
 
   const refresh = () => {
     setLoading(true)
     Promise.all([
       getMyClients(),
       supabase.from('payment_accounts').select('*').eq('is_active', true).order('sort_order'),
-    ]).then(([c, acc]) => { setClients(c); setAccounts(acc.data || []) }).finally(() => setLoading(false))
+    ]).then(([c, acc]) => { setClients(c); setAccounts(acc.data || []) })
+      .catch(() => showToast('Unable to load your clients', 'Please check your connection and try again.', 'error'))
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => { refresh() }, [])
@@ -56,14 +58,12 @@ export default function PayForClient() {
 
   function copyToClipboard(text) {
     navigator.clipboard?.writeText(text)
-    setCopyToast(true)
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
-    copyTimerRef.current = setTimeout(() => setCopyToast(false), 2200)
+    showToast('Account number copied')
   }
 
   async function handleDeclarePayment(account) {
     if (!amount || Number(amount) <= 0) {
-      alert('Enter the amount you are paying.')
+      showToast('Enter the amount you are paying', '', 'error')
       return
     }
     setDeclaring(true)
@@ -76,6 +76,7 @@ export default function PayForClient() {
         const { error: uploadError } = await supabase.storage.from('payment-receipts').upload(receiptPath, receiptFile)
         setUploadingReceipt(false)
         if (uploadError) throw uploadError
+        showToast('Receipt uploaded successfully')
       }
 
       const txRef = `manual-${paying.id}-${Date.now()}`
@@ -95,8 +96,9 @@ export default function PayForClient() {
       if (error) throw error
       setDeclaredIds((ids) => [...ids, paying.id])
       setPaying(null)
+      showToast('Payment submitted successfully', 'Your Super Admin will review and confirm it.')
     } catch (err) {
-      alert(err.message || 'Could not record this payment declaration.')
+      showToast('Payment submission failed', err.message || 'Please try again.', 'error')
     } finally {
       setDeclaring(false)
     }
@@ -243,12 +245,6 @@ export default function PayForClient() {
           </div>
         )}
       </Modal>
-
-      {copyToast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[110] bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-xl flex items-center gap-2 animate-fade-in">
-          <CheckCheck className="h-3.5 w-3.5" /> Account number copied
-        </div>
-      )}
     </DashboardLayout>
   )
-    }
+      }
