@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  CreditCard, Search, CheckCircle2, FileDown, FilePlus2, Receipt, Loader2, Plus, Clock, Image as ImageIcon, FileText,
+  CreditCard, Search, CheckCircle2, FileDown, FilePlus2, Receipt, Loader2, Plus, Clock, FileText,
 } from 'lucide-react'
 import DashboardLayout from '../components/Layout/DashboardLayout.jsx'
 import Card from '../components/UI/Card.jsx'
@@ -15,9 +15,11 @@ import { supabase } from '../lib/supabaseClient.js'
 import { formatCurrency, formatDate, formatDateTime } from '../utils/format.js'
 import { statusBadgeStyle, STATUS } from '../utils/evaluation.js'
 import { useSettings } from '../context/SettingsContext.jsx'
+import { useNotifications } from '../context/NotificationContext.jsx'
 
 export default function Checkout() {
   const { settings } = useSettings()
+  const { showToast } = useNotifications()
   const [params, setParams] = useSearchParams()
   const [quotations, setQuotations] = useState([])
   const [pendingPayments, setPendingPayments] = useState([])
@@ -41,6 +43,7 @@ export default function Checkout() {
     setLoading(true)
     Promise.all([getQuotations(), getPendingPartnerPayments()])
       .then(([q, p]) => { setQuotations(q); setPendingPayments(p) })
+      .catch(() => showToast('Unable to load payment data', 'Please check your connection and try again.', 'error'))
       .finally(() => setLoading(false))
   }
 
@@ -81,8 +84,9 @@ export default function Checkout() {
       })
       setRecording(null)
       refresh()
+      showToast('Payment recorded successfully')
     } catch (err) {
-      alert(err.message || 'Failed to record payment.')
+      showToast('Unable to record payment', err.message || 'Please try again.', 'error')
     } finally {
       setSaving(false)
     }
@@ -93,8 +97,9 @@ export default function Checkout() {
     try {
       await generateInvoiceNumber(record.id)
       refresh()
+      showToast('Invoice generated successfully')
     } catch (err) {
-      alert(err.message || 'Failed to generate invoice.')
+      showToast('Unable to generate invoice', err.message || 'Please try again.', 'error')
     } finally {
       setBusyId(null)
     }
@@ -105,6 +110,8 @@ export default function Checkout() {
     try {
       const { downloadInvoicePDF } = await import('../utils/pdfGenerator.js')
       await downloadInvoicePDF(record, settings)
+    } catch (err) {
+      showToast('Unable to download invoice', err.message || 'Please try again.', 'error')
     } finally {
       setBusyId(null)
     }
@@ -145,8 +152,9 @@ export default function Checkout() {
       await confirmPendingPayment(confirming.payment.id, confirmMethod)
       closeConfirm()
       refresh()
+      showToast('Payment confirmed successfully')
     } catch (err) {
-      alert(err.message || 'Failed to confirm payment.')
+      showToast('Unable to confirm payment', err.message || 'Please try again.', 'error')
     } finally {
       setConfirmBusy(false)
     }
@@ -378,6 +386,8 @@ export default function Checkout() {
             </div>
 
             <Select label="Payment Method (the only field you can set)" value={confirmMethod} onChange={(e) => setConfirmMethod(e.target.value)}>
+              <option>Bank Transfer</option>
+              <option>Cash</option>
               <option>Moniepoint</option>
               <option>Opay</option>
             </Select>
@@ -392,40 +402,4 @@ export default function Checkout() {
                 <img src={receiptSignedUrl} alt="Payment receipt" className="max-h-64 rounded-xl border border-slate-200 object-contain" />
               ) : (
                 <a href={receiptSignedUrl} target="_blank" rel="noreferrer" className="btn-secondary inline-flex">
-                  <FileText className="h-4 w-4" /> Open Receipt
-                </a>
-              )}
-            </div>
-
-                          {confirming.quotation && (
-              <div className="glass-panel p-3 flex items-center justify-between text-xs">
-                <span className="text-slate-500">Total Paid After This Payment</span>
-                <span className="font-semibold text-slate-800">
-                  {formatCurrency(
-                    Number(confirming.quotation.paidAmount || 0) +
-                    Number(confirming.payment.amount || 0),
-                    settings.currency_symbol
-                  )}{' '}
-                  / {formatCurrency(confirming.quotation.price, settings.currency_symbol)}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
-    </DashboardLayout>
-  )
-}
-
-function ReadField({ label, value, emphasis = false }) {
-  return (
-    <div className="glass-panel p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-        {label}
-      </p>
-      <p className={`text-sm mt-1 ${emphasis ? 'font-bold text-slate-800' : 'font-medium text-slate-700'}`}>
-        {value}
-      </p>
-    </div>
-  )
-}
+  
