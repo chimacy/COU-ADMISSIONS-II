@@ -22,6 +22,7 @@ import {
 import { formatCurrency } from '../utils/format.js'
 import { useSettings } from '../context/SettingsContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useNotifications } from '../context/NotificationContext.jsx'
 
 async function downloadQuotationPDF(record, settings) {
   const mod = await import('../utils/pdfGenerator.js')
@@ -57,6 +58,7 @@ export default function NewClient() {
 
   const { settings } = useSettings()
   const { isSuperAdmin } = useAuth()
+  const { showToast } = useNotifications()
 
   const myClientsPath = isSuperAdmin
     ? '/admin/clients'
@@ -115,6 +117,8 @@ export default function NewClient() {
             })
           }
         }
+      } catch (err) {
+        showToast('Unable to load this page', err.message || 'Please try again.', 'error')
       } finally {
         if (!cancelled) {
           setLoading(false)
@@ -127,6 +131,7 @@ export default function NewClient() {
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editId, prefillProgrammeId])
 
   const selectedProgramme = useMemo(
@@ -321,6 +326,7 @@ export default function NewClient() {
         const persisted = await saveQuotation(record)
 
         setSaved(true)
+        showToast('Client registered successfully')
 
         if (andDownload) {
           downloadQuotationPDF(
@@ -382,10 +388,9 @@ export default function NewClient() {
 
       setSaved(true)
 
-      alert(
-        `Assistance request submitted successfully.\n\nRequest Number: ${
-          request.requestNumber || 'Pending'
-        }\n\nThe request will be reviewed by a Super Admin before the client is added to your records.`,
+      showToast(
+        'Request submitted successfully',
+        `Request Number: ${request.requestNumber || 'Pending'}. A Super Admin will review it before the client is added to your records.`,
       )
 
       setTimeout(
@@ -393,11 +398,10 @@ export default function NewClient() {
         300,
       )
     } catch (err) {
-      alert(
-        err.message ||
-          (isSuperAdmin
-            ? 'Failed to save client record.'
-            : 'Failed to submit assistance request.'),
+      showToast(
+        isSuperAdmin ? 'Unable to save client record' : 'Request submission failed',
+        err.message || 'Please try again.',
+        'error',
       )
     } finally {
       setSaving(false)
@@ -758,160 +762,4 @@ export default function NewClient() {
             </button>
 
             {saved && (
-              <span className="text-xs font-semibold text-emerald-600 self-center">
-                {isSuperAdmin
-                  ? 'Saved successfully ✓'
-                  : 'Assistance request submitted ✓'}
-              </span>
-            )}
-          </div>
-        </Card>
-
-        <div className="space-y-6">
-          <Card className="!border-0 text-white brand-surface">
-            <div className="flex items-center gap-2 mb-4">
-              <Sparkles className="h-5 w-5" />
-
-              <h3 className="font-bold font-display">
-                Smart Evaluation
-              </h3>
-            </div>
-
-            {!selectedProgramme ||
-            !aggregateResult ? (
-              <p className="text-sm text-white/80">
-                Complete the aggregate
-                calculator and select a
-                programme to see the live
-                eligibility evaluation.
-              </p>
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-white/70">
-                    Programme Grade
-                  </p>
-
-                  <p className="font-semibold">
-                    {selectedProgramme.grade}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-white/70">
-                    Eligibility Status
-                  </p>
-
-                  <span
-                    className={`badge mt-1 ${statusBadgeStyle(
-                      evaluation.status,
-                    )} !bg-white/90`}
-                  >
-                    {evaluation.status}
-                  </span>
-                </div>
-
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-white/70">
-                    Working Type
-                  </p>
-
-                  <p className="font-semibold">
-                    {finalWorkingType ||
-                      'N/A'}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-white/70">
-                    Price
-                  </p>
-
-                  <p className="text-2xl font-bold font-display">
-                    {formatCurrency(
-                      finalPrice,
-                      settings.currency_symbol,
-                    )}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-white/70">
-                    Benchmark Status
-                  </p>
-
-                  <p className="text-sm">
-                    {evaluation.benchmarkStatus}
-                  </p>
-                </div>
-
-                <div className="bg-white/10 rounded-xl p-3">
-                  <p className="text-xs uppercase tracking-wide text-white/70 mb-1">
-                    Recommendation
-                  </p>
-
-                  <p className="text-sm leading-relaxed">
-                    {evaluation.recommendation}
-                  </p>
-                </div>
-              </div>
-            )}
-          </Card>
-
-          {alternatives.length > 0 && (
-            <Card>
-              <h4 className="font-bold text-sm text-slate-800 mb-3">
-                Suggested Alternatives
-              </h4>
-
-              <div className="space-y-2">
-                {alternatives.map(
-                  ({
-                    programme,
-                    evaluation: ev,
-                  }) => (
-                    <button
-                      key={programme.id}
-                      onClick={() =>
-                        setForm((f) => ({
-                          ...f,
-                          programmeId:
-                            programme.id,
-                          workingTypeOverride:
-                            '',
-                        }))
-                      }
-                      className="w-full text-left glass-panel p-3 hover:border-primary-300 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold text-slate-800">
-                          {programme.name}
-                        </p>
-
-                        <span
-                          className={`badge !text-[10px] ${statusBadgeStyle(
-                            ev.status,
-                          )}`}
-                        >
-                          {ev.status}
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-slate-500">
-                        {programme.grade} &middot;{' '}
-                        {formatCurrency(
-                          ev.price,
-                          settings.currency_symbol,
-                        )}
-                      </p>
-                    </button>
-                  ),
-                )}
-              </div>
-            </Card>
-          )}
-        </div>
-      </div>
-    </DashboardLayout>
-  )
-}
+              <span className="text-xs font-semibold text-emerald-600 s
