@@ -60,7 +60,8 @@ export default function PayForClient() {
     navigator.clipboard?.writeText(text)
     showToast('Account number copied')
   }
-async function handleDeclarePayment(account) {
+
+ async function handleDeclarePayment(account) {
   if (!paying) return
 
   if (!amount || Number(amount) <= 0) {
@@ -69,20 +70,20 @@ async function handleDeclarePayment(account) {
   }
 
   const paymentAmount = Number(amount)
-  const outstandingBalance = Math.max(
-    0,
+  const outstandingBalance =
     Number(paying.price || 0) - Number(paying.paidAmount || 0)
-  )
 
   if (paymentAmount > outstandingBalance) {
     showToast(
       'Invalid payment amount',
-      `Maximum outstanding balance is ${formatCurrency(
-        outstandingBalance,
-        settings.currency_symbol
-      )}.`,
+      `Maximum outstanding balance is ${formatCurrency(outstandingBalance, settings.currency_symbol)}.`,
       'error'
     )
+    return
+  }
+
+  if (!user?.id) {
+    showToast('Session error', 'Please log in again and try.', 'error')
     return
   }
 
@@ -97,22 +98,76 @@ async function handleDeclarePayment(account) {
       const extension =
         receiptFile.name.split('.').pop()?.toLowerCase() || 'jpg'
 
-      receiptPath = `${user.id}/${paying.id}-${Date.now()}.${extension}`
+      receiptPath =
+        user.id + '/' + paying.id + '-' + Date.now() + '.' + extension
 
-      const { error: uploadError } = await supabase.storage
-        .from('payment-receipts')
-        .upload(receiptPath, receiptFile, {
+      const storage = supabase.storage
+      const bucket = storage.from('payment-receipts')
+
+      const uploadResult = await bucket.upload(
+        receiptPath,
+        receiptFile,
+        {
           cacheControl: '3600',
           upsert: false,
-        })
+        }
+      )
 
       setUploadingReceipt(false)
 
-      if (uploadError) {
-        throw uploadError
+      if (uploadResult.error) {
+        throw uploadResult.error
       }
     }
 
+    const txRef = 'manual-' + paying.id + '-' + Date.now()
+
+    const paymentData = {
+      quotation_id: paying.id,
+      partner_id: user.id,
+      client_name: paying.clientName,
+      amount: paymentAmount,
+      currency: 'NGN',
+      tx_ref: txRef,
+      status: 'PENDING',
+      verified: false,
+      payment_date: new Date().toISOString().slice(0, 10),
+      payment_type: paymentType,
+      payment_method: account.provider,
+      receipt_url: receiptPath,
+      recorded_by: user.id,
+    }
+
+    const paymentResult = await supabase
+      .from('payments')
+      .insert(paymentData)
+
+    if (paymentResult.error) {
+      throw paymentResult.error
+    }
+
+    setDeclaredIds((ids) => [...ids, paying.id])
+    setPaying(null)
+    setReceiptFile(null)
+    setAmount('')
+    setUploadingReceipt(false)
+
+    showToast(
+      'Payment submitted successfully',
+      'Your payment is now awaiting Super Admin confirmation.'
+    )
+  } catch (err) {
+    setUploadingReceipt(false)
+
+    showToast(
+      'Payment submission failed',
+      err?.message || 'Please try again.',
+      'error'
+    )
+  } finally {
+    setDeclaring(false)
+  }
+}
     const txRef = `manual-${paying.id}-${Date.now()}`
 
     const { error: paymentError } = await supabase
