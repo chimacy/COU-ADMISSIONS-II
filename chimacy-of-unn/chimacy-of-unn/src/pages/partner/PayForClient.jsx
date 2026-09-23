@@ -60,9 +60,10 @@ export default function PayForClient() {
     navigator.clipboard?.writeText(text)
     showToast('Account number copied')
   }
-
- async function handleDeclarePayment(account) {
-  if (!paying) return
+async function handleDeclarePayment(account) {
+  if (!paying) {
+    return
+  }
 
   if (!amount || Number(amount) <= 0) {
     showToast('Enter the amount you are paying', '', 'error')
@@ -76,13 +77,14 @@ export default function PayForClient() {
   if (paymentAmount > outstandingBalance) {
     showToast(
       'Invalid payment amount',
-      `Maximum outstanding balance is ${formatCurrency(outstandingBalance, settings.currency_symbol)}.`,
+      'Maximum outstanding balance is ' +
+        formatCurrency(outstandingBalance, settings.currency_symbol),
       'error'
     )
     return
   }
 
-  if (!user?.id) {
+  if (!user || !user.id) {
     showToast('Session error', 'Please log in again and try.', 'error')
     return
   }
@@ -96,31 +98,40 @@ export default function PayForClient() {
       setUploadingReceipt(true)
 
       const extension =
-        receiptFile.name.split('.').pop()?.toLowerCase() || 'jpg'
+        receiptFile.name.split('.').pop().toLowerCase() || 'jpg'
 
       receiptPath =
-        user.id + '/' + paying.id + '-' + Date.now() + '.' + extension
+        user.id +
+        '/' +
+        paying.id +
+        '-' +
+        Date.now() +
+        '.' +
+        extension
 
-      const storage = supabase.storage
-      const bucket = storage.from('payment-receipts')
+      const storageBucket = supabase.storage.from('payment-receipts')
 
-      const uploadResult = await bucket.upload(
+      const uploadResponse = await storageBucket.upload(
         receiptPath,
         receiptFile,
         {
           cacheControl: '3600',
-          upsert: false,
+          upsert: false
         }
       )
 
       setUploadingReceipt(false)
 
-      if (uploadResult.error) {
-        throw uploadResult.error
+      if (uploadResponse.error) {
+        throw uploadResponse.error
       }
     }
 
-    const txRef = 'manual-' + paying.id + '-' + Date.now()
+    const txRef =
+      'manual-' +
+      paying.id +
+      '-' +
+      Date.now()
 
     const paymentData = {
       quotation_id: paying.id,
@@ -135,18 +146,21 @@ export default function PayForClient() {
       payment_type: paymentType,
       payment_method: account.provider,
       receipt_url: receiptPath,
-      recorded_by: user.id,
+      recorded_by: user.id
     }
 
-    const paymentResult = await supabase
-      .from('payments')
-      .insert(paymentData)
+    const paymentsTable = supabase.from('payments')
 
-    if (paymentResult.error) {
-      throw paymentResult.error
+    const paymentResponse = await paymentsTable.insert(paymentData)
+
+    if (paymentResponse.error) {
+      throw paymentResponse.error
     }
 
-    setDeclaredIds((ids) => [...ids, paying.id])
+    setDeclaredIds(function (ids) {
+      return ids.concat(paying.id)
+    })
+
     setPaying(null)
     setReceiptFile(null)
     setAmount('')
@@ -161,53 +175,9 @@ export default function PayForClient() {
 
     showToast(
       'Payment submission failed',
-      err?.message || 'Please try again.',
-      'error'
-    )
-  } finally {
-    setDeclaring(false)
-  }
-}
-    const txRef = `manual-${paying.id}-${Date.now()}`
-
-    const { error: paymentError } = await supabase
-      .from('payments')
-      .insert({
-        quotation_id: paying.id,
-        partner_id: user.id,
-        client_name: paying.clientName,
-        amount: paymentAmount,
-        currency: 'NGN',
-        tx_ref: txRef,
-        status: 'PENDING',
-        verified: false,
-        payment_date: new Date().toISOString().slice(0, 10),
-        payment_type: paymentType,
-        payment_method: account.provider,
-        receipt_url: receiptPath,
-        recorded_by: user.id,
-      })
-
-    if (paymentError) {
-      throw paymentError
-    }
-
-    setDeclaredIds((ids) => [...ids, paying.id])
-    setPaying(null)
-    setReceiptFile(null)
-    setAmount('')
-    setUploadingReceipt(false)
-
-    showToast(
-      'Payment submitted successfully',
-      'Your payment is now awaiting Super Admin confirmation.'
-    )
-  } catch (err) {
-    setUploadingReceipt(false)
-
-    showToast(
-      'Payment submission failed',
-      err?.message || 'Please try again.',
+      err && err.message
+        ? err.message
+        : 'Please try again.',
       'error'
     )
   } finally {
