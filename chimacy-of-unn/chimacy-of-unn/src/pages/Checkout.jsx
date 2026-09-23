@@ -402,4 +402,40 @@ export default function Checkout() {
                 <img src={receiptSignedUrl} alt="Payment receipt" className="max-h-64 rounded-xl border border-slate-200 object-contain" />
               ) : (
                 <a href={receiptSignedUrl} target="_blank" rel="noreferrer" className="btn-secondary inline-flex">
-  
+                  <FileText className="h-4 w-4" /> Open Receipt
+                </a>
+              )}
+            </div>
+
+            {confirming.quotation && (
+              <div className="glass-panel p-3 flex items-center justify-between text-xs">
+                <span className="text-slate-500">Total Paid After This Payment</span>
+                <span className="font-semibold text-slate-800">
+                  {formatCurrency(
+                    Number(confirming.quotation.paidAmount || 0) +
+                    Number(confirming.payment.amount || 0),
+                    settings.currency_symbol
+                  )}{' '}
+                  / {formatCurrency(confirming.quotation.price, settings.currency_symbol)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+    </DashboardLayout>
+  )
+}
+
+function ReadField({ label, value, emphasis = false }) {
+  return (
+    <div className="glass-panel p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        {label}
+      </p>
+      <p className={`text-sm mt-1 ${emphasis ? 'font-bold text-slate-800' : 'font-medium text-slate-700'}`}>
+        {value}
+      </p>
+    </div>
+  )
+}
