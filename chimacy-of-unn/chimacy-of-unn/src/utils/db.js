@@ -196,11 +196,75 @@ export async function getPendingPartnerPayments() {
 }
 
 export async function confirmPendingPayment(paymentId, method) {
-  const { data, error } = await supabase.from('payments').update({
-    status: 'SUCCESSFUL', verified: true, verified_at: new Date().toISOString(), payment_method: method,
-  }).eq('id', paymentId).select().single()
-  if (error) throw error
-  return data
+  const { data: payment, error: paymentFetchError } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('id', paymentId)
+    .maybeSingle()
+
+  if (paymentFetchError) throw paymentFetchError
+  if (!payment) throw new Error('Payment record not found.')
+
+  if (payment.status !== 'PENDING') {
+    throw new Error('This payment has already been processed.')
+  }
+
+  const verifiedAt = new Date().toISOString()
+
+  const { data: confirmedPayment, error: confirmError } = await supabase
+    .from('payments')
+    .update({
+      status: 'SUCCESSFUL',
+      verified: true,
+      verified_at: verifiedAt,
+      payment_method: method,
+    })
+    .eq('id', paymentId)
+    .select()
+    .single()
+
+  if (confirmError) throw confirmError
+
+  if (!payment.quotation_id) {
+    return confirmedPayment
+  }
+
+  const { data: successfulPayments, error: paymentsError } = await supabase
+    .from('payments')
+    .select('amount, payment_date, payment_method, created_at')
+    .eq('quotation_id', payment.quotation_id)
+    .eq('status', 'SUCCESSFUL')
+
+  if (paymentsError) throw paymentsError
+
+  const totalPaid = (successfulPayments || []).reduce(
+    (total, item) => total + Number(item.amount || 0),
+    0
+  )
+
+  const quotation = await getQuotationById(payment.quotation_id)
+
+  if (!quotation) {
+    return confirmedPayment
+  }
+
+  const isFullyPaid = totalPaid >= Number(quotation.price || 0)
+
+  const { error: quotationError } = await supabase
+    .from('quotations')
+    .update({
+      paid_amount: totalPaid,
+      paid: isFullyPaid,
+      paid_date: isFullyPaid
+        ? (payment.payment_date || new Date().toISOString().slice(0, 10))
+        : null,
+      payment_method: method,
+    })
+    .eq('id', payment.quotation_id)
+
+  if (quotationError) throw quotationError
+
+  return confirmedPayment
 }
 
 export async function generateInvoiceNumber(id) {
