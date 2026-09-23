@@ -6,13 +6,14 @@ import DashboardLayout from '../components/Layout/DashboardLayout.jsx'
 import Card from '../components/UI/Card.jsx'
 import { Input, Textarea, Select } from '../components/UI/FormField.jsx'
 import { useSettings } from '../context/SettingsContext.jsx'
+import { useNotifications } from '../context/NotificationContext.jsx'
 import { exportAllData } from '../utils/db.js'
 import { validateImageFile, compressImage } from '../utils/image.js'
 
 export default function Settings() {
   const { settings, updateSettings, uploadBrandingImage, loading } = useSettings()
+  const { showToast } = useNotifications()
   const [form, setForm] = useState(settings)
-  const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState('')
   const [exporting, setExporting] = useState(false)
@@ -24,20 +25,18 @@ export default function Settings() {
   function handleChange(key) {
     return (e) => {
       setForm((f) => ({ ...f, [key]: e.target.value }))
-      setSaved(false)
     }
   }
 
   function handleUpload(kind) {
-    // kind: 'logo' | 'signature'
     return async (e) => {
       const file = e.target.files?.[0]
-      e.target.value = '' // allow re-selecting the same file later
+      e.target.value = ''
       if (!file) return
 
       const validationError = validateImageFile(file)
       if (validationError) {
-        alert(validationError)
+        showToast('Invalid image', validationError, 'error')
         return
       }
 
@@ -47,18 +46,11 @@ export default function Settings() {
         const url = await uploadBrandingImage(compressed, kind)
         const field = kind === 'logo' ? 'logo_url' : 'signature_url'
 
-        // THE FIX: save straight to Supabase the moment the upload finishes,
-        // instead of only updating local form state and waiting for a
-        // separate "Save Settings" click. This is what was causing the logo
-        // to "not really persist" - it only ever saved if the admin
-        // remembered to click Save afterward. Because SettingsContext
-        // broadcasts this via Supabase Realtime, it now shows up in the
-        // sidebar, topbar, login screen, and homepage immediately, on every
-        // device, without any extra step.
         await updateSettings({ [field]: url })
         setForm((f) => ({ ...f, [field]: url }))
+        showToast(kind === 'logo' ? 'Logo updated successfully' : 'Signature updated successfully')
       } catch (err) {
-        alert(err.message || 'Upload failed. Please try a different image.')
+        showToast('Upload failed', err.message || 'Please try a different image.', 'error')
       } finally {
         setUploading('')
       }
@@ -70,8 +62,9 @@ export default function Settings() {
     try {
       await updateSettings({ [field]: '' })
       setForm((f) => ({ ...f, [field]: '' }))
+      showToast('Image removed successfully')
     } catch (err) {
-      alert(err.message || 'Failed to remove image.')
+      showToast('Unable to remove image', err.message || 'Please try again.', 'error')
     }
   }
 
@@ -79,10 +72,9 @@ export default function Settings() {
     setSaving(true)
     try {
       await updateSettings(form)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
+      showToast('Changes saved successfully', 'Synced to all devices.')
     } catch (err) {
-      alert(err.message || 'Failed to save settings.')
+      showToast('Unable to save settings', err.message || 'Please try again.', 'error')
     } finally {
       setSaving(false)
     }
@@ -99,6 +91,8 @@ export default function Settings() {
       a.download = `chimacy-backup-${new Date().toISOString().slice(0, 10)}.json`
       a.click()
       URL.revokeObjectURL(url)
+    } catch (err) {
+      showToast('Export failed', err.message || 'Please try again.', 'error')
     } finally {
       setExporting(false)
     }
@@ -159,7 +153,6 @@ export default function Settings() {
             <button onClick={handleSave} disabled={saving} className="btn-primary">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save Settings
             </button>
-            {saved && <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 self-center">Settings saved — synced to all devices ✓</span>}
           </div>
         </Card>
 
@@ -254,4 +247,4 @@ function ColorField({ label, value, onChange }) {
       </div>
     </div>
   )
-}
+        }
