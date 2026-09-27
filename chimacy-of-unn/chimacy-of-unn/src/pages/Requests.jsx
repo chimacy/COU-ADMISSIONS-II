@@ -13,6 +13,7 @@ import {
 } from '../utils/db.js'
 import { formatCurrency, formatDate, formatDateTime } from '../utils/format.js'
 import { useSettings } from '../context/SettingsContext.jsx'
+import { useNotifications } from '../context/NotificationContext.jsx'
 import { buildWhatsAppLink, buildAdminOutreachMessage } from '../utils/whatsapp.js'
 import { statusBadgeStyle } from '../utils/evaluation.js'
 
@@ -32,6 +33,7 @@ const STATUS_COLORS = {
 export default function Requests() {
   const [params] = useSearchParams()
   const { settings } = useSettings()
+  const { showToast } = useNotifications()
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
@@ -42,7 +44,9 @@ export default function Requests() {
 
   const refresh = () => {
     setLoading(true)
-    getRequests().then(setRequests).finally(() => setLoading(false))
+    getRequests().then(setRequests)
+      .catch(() => showToast('Unable to load requests', 'Please check your connection and try again.', 'error'))
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => { refresh() }, [])
@@ -77,9 +81,9 @@ export default function Requests() {
       const count = await deleteRejectedRequests()
       setConfirmingClear(false)
       refresh()
-      alert(`Cleared ${count} rejected request(s).`)
+      showToast(`Cleared ${count} rejected request(s)`)
     } catch (err) {
-      alert(err.message || 'Failed to clear rejected requests.')
+      showToast('Unable to clear rejected requests', err.message || 'Please try again.', 'error')
     } finally {
       setClearing(false)
     }
@@ -179,6 +183,7 @@ export default function Requests() {
 function RequestDetailModal({
   request, onClose, onChanged, settings,
 }) {
+  const { showToast } = useNotifications()
   const [notes, setNotes] = useState([])
   const [history, setHistory] = useState([])
   const [linkedQuotation, setLinkedQuotation] = useState(null)
@@ -200,8 +205,9 @@ function RequestDetailModal({
     try {
       await updateRequestStatus(request.id, status)
       onChanged()
+      showToast('Status updated successfully')
     } catch (err) {
-      alert(err.message || 'Failed to update status.')
+      showToast('Unable to update status', err.message || 'Please try again.', 'error')
     } finally {
       setBusy(false)
     }
@@ -212,9 +218,9 @@ function RequestDetailModal({
     try {
       await acceptRequestAndConvert(request)
       onChanged()
-      alert('Request accepted and added to Client Records. You can now confirm payment from Checkout & Invoices.')
+      showToast('Request accepted', 'Added to Client Records. You can now confirm payment from Checkout & Invoices.')
     } catch (err) {
-      alert(err.message || 'Failed to accept request.')
+      showToast('Unable to accept request', err.message || 'Please try again.', 'error')
     } finally {
       setBusy(false)
     }
@@ -228,8 +234,9 @@ function RequestDetailModal({
       setNoteText('')
       const fresh = await getRequestNotes(request.id)
       setNotes(fresh)
+      showToast('Note added successfully')
     } catch (err) {
-      alert(err.message || 'Failed to add note.')
+      showToast('Unable to add note', err.message || 'Please try again.', 'error')
     } finally {
       setBusy(false)
     }
@@ -383,4 +390,4 @@ function Field({ label, value }) {
       <p className="text-slate-800 font-medium">{value ?? '-'}</p>
     </div>
   )
-      }
+}
