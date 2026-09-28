@@ -9,7 +9,7 @@ const SettingsContext = createContext(null)
 // resolves (or if the network request fails) - never persisted anywhere.
 const FALLBACK_SETTINGS = {
   id: 1,
-  company_name: 'CHIMACY OF UNN',
+  company_name: 'COU ADMISSION SERVICES',
   tagline: 'Your Trusted Admission Consulting Partner',
   institution_name: 'University of Nigeria, Nsukka',
   phone: '',
