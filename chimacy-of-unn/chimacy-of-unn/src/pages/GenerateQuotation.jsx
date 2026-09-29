@@ -300,4 +300,4 @@ export default function GenerateQuotation() {
       </div>
     </DashboardLayout>
   )
-  }
+}
