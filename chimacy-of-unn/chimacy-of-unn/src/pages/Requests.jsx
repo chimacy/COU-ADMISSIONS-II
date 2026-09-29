@@ -71,8 +71,26 @@ export default function Requests() {
   }, [requests, statusFilter, query])
 
   async function openDetail(id) {
+  try {
     const r = await getRequestById(id)
+
+    if (!r) {
+      showToast(
+        'Request not found',
+        'This assistance request may have been deleted.',
+        'error'
+      )
+      return
+    }
+
     setSelected(r)
+  } catch (err) {
+    showToast(
+      'Unable to open request',
+      err?.message || 'Please try again.',
+      'error'
+    )
+  }
   }
 
   async function handleClearRejected() {
