@@ -1,14 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  FileDown, Search, Sparkles, UserPlus, Loader2, Calculator,
+  FileDown, Search, Sparkles, UserPlus, Loader2, Calculator, GraduationCap,
 } from 'lucide-react'
 import DashboardLayout from '../components/Layout/DashboardLayout.jsx'
 import Card from '../components/UI/Card.jsx'
 import { Select, Input } from '../components/UI/FormField.jsx'
 import BudgetSearch from '../components/BudgetSearch.jsx'
 import { getProgrammes, getQuotations } from '../utils/db.js'
-import { evaluateCandidate, statusBadgeStyle } from '../utils/evaluation.js'
+import { evaluateCandidate, statusBadgeStyle, STATUS } from '../utils/evaluation.js'
 import { calculateAggregate } from '../utils/aggregate.js'
 import { getAssessmentConfig } from '../utils/publicApi.js'
 import { formatCurrency, formatDate } from '../utils/format.js'
@@ -26,6 +26,7 @@ export default function GenerateQuotation() {
   const navigate = useNavigate()
   const { settings } = useSettings()
   const { isSuperAdmin } = useAuth()
+  const checkerRef = useRef(null)
   const [programmes, setProgrammes] = useState([])
   const [quotations, setQuotations] = useState([])
   const [config, setConfig] = useState(null)
@@ -38,12 +39,9 @@ export default function GenerateQuotation() {
   const [subjects, setSubjects] = useState(emptySubjects)
   const [olevelSittings, setOlevelSittings] = useState(1)
 
-  // A Partner never has access to /admin/*, so "Continue to Full Quotation"
-  // and the saved-quotation list must point at their own routes instead.
   const newClientPath = isSuperAdmin ? '/admin/new-client' : '/partner/new-client'
 
   useEffect(() => {
-    // Regular Partners never see saved quotations here, so skip fetching them.
     const tasks = [getProgrammes(), getAssessmentConfig()]
     if (isSuperAdmin) tasks.push(getQuotations())
     Promise.all(tasks)
@@ -73,12 +71,35 @@ export default function GenerateQuotation() {
 
   const evaluation = useMemo(() => evaluateCandidate(selectedProgramme, effectiveScore), [selectedProgramme, effectiveScore])
 
+  const qualifying = useMemo(() => {
+    if (!effectiveScore || programmes.length === 0) return []
+    return programmes
+      .map((p) => ({ programme: p, evaluation: evaluateCandidate(p, effectiveScore) }))
+      .filter(({ evaluation: ev }) => ev.status === STATUS.ELIGIBLE || ev.status === STATUS.ELIGIBLE_DOUBLE)
+      .sort((a, b) => {
+        const aRank = a.evaluation.status === STATUS.ELIGIBLE ? 0 : 1
+        const bRank = b.evaluation.status === STATUS.ELIGIBLE ? 0 : 1
+        if (aRank !== bRank) return aRank - bRank
+        return (b.evaluation.price || 0) - (a.evaluation.price || 0)
+      })
+  }, [programmes, effectiveScore])
+
   function updateSubject(index, field, value) {
     setSubjects((list) => {
       const next = [...list]
       next[index] = { ...next[index], [field]: value }
       return next
     })
+  }
+
+  function toggleAggregateMode() {
+    setUseAggregate((v) => !v)
+    setScore('')
+  }
+
+  function selectProgramme(id) {
+    setProgrammeId(id)
+    checkerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   const filteredQuotations = useMemo(() => {
@@ -97,100 +118,149 @@ export default function GenerateQuotation() {
   return (
     <DashboardLayout title={pageTitle}>
       <div className={isSuperAdmin ? 'grid grid-cols-1 xl:grid-cols-2 gap-6' : 'max-w-2xl'}>
-        <Card>
-          <div className="flex items-center justify-between gap-2 mb-4">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary-500" />
-              <h3 className="font-bold font-display text-slate-800">Quick Eligibility Checker</h3>
-            </div>
-            <button
-              onClick={() => setUseAggregate((v) => !v)}
-              className={`btn-secondary !text-xs !py-1.5 ${useAggregate ? '!bg-primary-50 !text-primary-700' : ''}`}
-            >
-              <Calculator className="h-3.5 w-3.5" /> {useAggregate ? 'Using Aggregate' : 'Use Aggregate Calculator'}
-            </button>
-          </div>
-          <p className="text-xs text-slate-500 mb-4">
-            {useAggregate
-              ? "Enter the client's JAMB score and O'Level grades - their aggregate is calculated automatically and used for eligibility, exactly like the Client Portal."
-              : 'Check a programme against a raw JAMB score instantly. Toggle "Use Aggregate Calculator" to factor in O\'Level grades.'}
-          </p>
-
-          <div className="space-y-4">
-            <BudgetSearch
-              programmes={programmes}
-              currencySymbol={settings.currency_symbol}
-              onSelect={(p) => setProgrammeId(p.id)}
-            />
-            <Select label="Programme" value={programmeId} onChange={(e) => setProgrammeId(e.target.value)}>
-              <option value="">-- Select a programme --</option>
-              {programmes.map((p) => (
-                <option key={p.id} value={p.id}>{p.name} ({p.grade})</option>
-              ))}
-            </Select>
-            <Input label="JAMB Score" type="number" min="0" max="400" value={score} onChange={(e) => setScore(e.target.value)} placeholder="e.g. 272" />
-
-            {useAggregate && (
-              <div className="glass-panel p-4">
-                <Select label="Number of O'Level Sittings" value={olevelSittings} onChange={(e) => setOlevelSittings(e.target.value)} className="mb-3 max-w-xs">
-                  <option value={1}>One Sitting</option>
-                  <option value={2}>Two Sittings</option>
-                </Select>
-                <p className="label-field">4 Subjects &amp; O'Level Grades</p>
-                <div className="space-y-2">
-                  {subjects.map((row, i) => (
-                    <div key={i} className="grid grid-cols-2 gap-2">
-                      <Select value={row.subject} onChange={(e) => updateSubject(i, 'subject', e.target.value)}>
-                        <option value="">-- Subject {i + 1} --</option>
-                        {jambOptions.map((s) => <option key={s} value={s} disabled={chosenSubjects.includes(s) && row.subject !== s}>{s}</option>)}
-                      </Select>
-                      <Select value={row.grade} onChange={(e) => updateSubject(i, 'grade', e.target.value)}>
-                        <option value="">-- Grade --</option>
-                        {gradeOptions.map((g) => <option key={g} value={g}>{g}</option>)}
-                      </Select>
-                    </div>
-                  ))}
+        <div className="space-y-6">
+          <div ref={checkerRef} className="scroll-mt-24">
+            <Card>
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-primary-500" />
+                  <h3 className="font-bold font-display text-slate-800">Quick Eligibility Checker</h3>
                 </div>
-                {aggregateResult && (
-                  <div className="mt-3 pt-3 border-t border-primary-100 flex items-center justify-between">
-                    <span className="text-xs text-slate-500">Calculated Aggregate</span>
-                    <span className="font-bold text-primary-700">{aggregateResult.aggregate} / 400</span>
+                <button
+                  onClick={toggleAggregateMode}
+                  className={`btn-secondary !text-xs !py-1.5 ${useAggregate ? '!bg-primary-50 !text-primary-700' : ''}`}
+                >
+                  <Calculator className="h-3.5 w-3.5" /> {useAggregate ? 'Using Aggregate Calculator' : 'Use Aggregate Calculator'}
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mb-4">
+                {useAggregate
+                  ? "Enter the client's JAMB score and O'Level grades - their aggregate is calculated automatically and used for eligibility, exactly like the Client Portal."
+                  : 'Enter a client\'s aggregate to check eligibility instantly. Switch on "Use Aggregate Calculator" to work it out from their JAMB score and O\'Level grades.'}
+              </p>
+
+              <div className="space-y-4">
+                <BudgetSearch
+                  programmes={programmes}
+                  currencySymbol={settings.currency_symbol}
+                  onSelect={(p) => setProgrammeId(p.id)}
+                />
+                <Select label="Programme" value={programmeId} onChange={(e) => setProgrammeId(e.target.value)}>
+                  <option value="">-- Select a programme --</option>
+                  {programmes.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.grade})</option>
+                  ))}
+                </Select>
+                <Input
+                  label={useAggregate ? 'JAMB Score' : 'Aggregate'}
+                  type="number"
+                  min="0"
+                  max="400"
+                  value={score}
+                  onChange={(e) => setScore(e.target.value)}
+                  placeholder={useAggregate ? 'e.g. 272' : 'e.g. 267'}
+                />
+
+                {useAggregate && (
+                  <div className="glass-panel p-4">
+                    <Select label="Number of O'Level Sittings" value={olevelSittings} onChange={(e) => setOlevelSittings(e.target.value)} className="mb-3 max-w-xs">
+                      <option value={1}>One Sitting</option>
+                      <option value={2}>Two Sittings</option>
+                    </Select>
+                    <p className="label-field">4 Subjects &amp; O'Level Grades</p>
+                    <div className="space-y-2">
+                      {subjects.map((row, i) => (
+                        <div key={i} className="grid grid-cols-2 gap-2">
+                          <Select value={row.subject} onChange={(e) => updateSubject(i, 'subject', e.target.value)}>
+                            <option value="">-- Subject {i + 1} --</option>
+                            {jambOptions.map((s) => <option key={s} value={s} disabled={chosenSubjects.includes(s) && row.subject !== s}>{s}</option>)}
+                          </Select>
+                          <Select value={row.grade} onChange={(e) => updateSubject(i, 'grade', e.target.value)}>
+                            <option value="">-- Grade --</option>
+                            {gradeOptions.map((g) => <option key={g} value={g}>{g}</option>)}
+                          </Select>
+                        </div>
+                      ))}
+                    </div>
+                    {aggregateResult && (
+                      <div className="mt-3 pt-3 border-t border-primary-100 flex items-center justify-between">
+                        <span className="text-xs text-slate-500">Calculated Aggregate</span>
+                        <span className="font-bold text-primary-700">{aggregateResult.aggregate} / 400</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
+
+              {selectedProgramme && (
+                <div className="mt-5 glass-panel p-4 space-y-3 animate-fade-in">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase text-slate-500">Status</span>
+                    <span className={`badge ${statusBadgeStyle(evaluation.status)}`}>{evaluation.status}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase text-slate-500">Working Type</span>
+                    <span className="font-medium text-slate-800">{evaluation.workingType || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase text-slate-500">Price</span>
+                    <span className="font-bold text-primary-700">{formatCurrency(evaluation.price, settings.currency_symbol)}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold uppercase text-slate-500">Recommendation</span>
+                    <p className="text-sm text-slate-700 mt-1">{evaluation.recommendation}</p>
+                  </div>
+                  <button
+                    onClick={() => navigate(`${newClientPath}?prefill=${selectedProgramme.id}`)}
+                    className="btn-primary w-full mt-2"
+                  >
+                    <UserPlus className="h-4 w-4" /> Continue to Full Quotation
+                  </button>
+                </div>
+              )}
+            </Card>
           </div>
 
-          {selectedProgramme && (
-            <div className="mt-5 glass-panel p-4 space-y-3 animate-fade-in">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase text-slate-500">Status</span>
-                <span className={`badge ${statusBadgeStyle(evaluation.status)}`}>{evaluation.status}</span>
+          {effectiveScore ? (
+            <Card>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="flex items-center gap-2">
+                  <GraduationCap className="h-5 w-5 text-primary-500" />
+                  <h3 className="font-bold font-display text-slate-800">Programmes You Qualify For</h3>
+                </div>
+                <span className="badge bg-primary-50 text-primary-700">{qualifying.length}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase text-slate-500">Working Type</span>
-                <span className="font-medium text-slate-800">{evaluation.workingType || 'N/A'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase text-slate-500">Price</span>
-                <span className="font-bold text-primary-700">{formatCurrency(evaluation.price, settings.currency_symbol)}</span>
-              </div>
-              <div>
-                <span className="text-xs font-semibold uppercase text-slate-500">Recommendation</span>
-                <p className="text-sm text-slate-700 mt-1">{evaluation.recommendation}</p>
-              </div>
-              <button
-                onClick={() => navigate(`${newClientPath}?prefill=${selectedProgramme.id}`)}
-                className="btn-primary w-full mt-2"
-              >
-                <UserPlus className="h-4 w-4" /> Continue to Full Quotation
-              </button>
-            </div>
-          )}
-        </Card>
+              <p className="text-xs text-slate-500 mb-3">
+                Based on an aggregate of <strong>{effectiveScore}</strong>. Tap a programme to see its full result above.
+              </p>
 
-        {/* Regular Partners only ever see the checker above - the saved
-            quotation search/regeneration panel is Super Admin only. */}
+              {qualifying.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-6">No programmes currently match this aggregate.</p>
+              ) : (
+                <div className="space-y-2 max-h-[420px] overflow-y-auto">
+                  {qualifying.map(({ programme, evaluation: ev }) => (
+                    <button
+                      key={programme.id}
+                      onClick={() => selectProgramme(programme.id)}
+                      className={`w-full text-left glass-panel p-3 transition-colors ${
+                        programme.id === programmeId ? '!border-primary-400 bg-primary-50/60' : 'hover:border-primary-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-800">{programme.name}</p>
+                        <span className={`badge !text-[10px] shrink-0 ${statusBadgeStyle(ev.status)}`}>{ev.workingType || ev.status}</span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {programme.grade} &middot; {formatCurrency(ev.price, settings.currency_symbol)}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </Card>
+          ) : null}
+        </div>
+
         {isSuperAdmin && (
           <Card>
             <h3 className="font-bold font-display text-slate-800 mb-4">Regenerate a Saved Quotation</h3>
@@ -230,4 +300,4 @@ export default function GenerateQuotation() {
       </div>
     </DashboardLayout>
   )
-}
+  }
