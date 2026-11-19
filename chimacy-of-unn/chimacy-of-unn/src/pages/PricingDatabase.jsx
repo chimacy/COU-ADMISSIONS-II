@@ -11,6 +11,7 @@ import {
 } from '../utils/db.js'
 import { formatCurrency } from '../utils/format.js'
 import { useSettings } from '../context/SettingsContext.jsx'
+import GradePriceEditor from '../components/GradePriceEditor.jsx'
 
 const emptyProgramme = {
   id: '',
@@ -88,6 +89,7 @@ export default function PricingDatabase() {
   return (
     <DashboardLayout title="Pricing Database">
       <div className="space-y-5">
+        <GradePriceEditor onSaved={refresh} />
         <Card className="!p-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
